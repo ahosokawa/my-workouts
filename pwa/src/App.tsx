@@ -16,25 +16,29 @@ export default function App() {
   // No profile yet -> onboarding
   if (!profile) {
     return (
-      <Routes>
-        <Route path="*" element={<OnboardingView />} />
-      </Routes>
+      <div className="h-full pt-safe">
+        <Routes>
+          <Route path="*" element={<OnboardingView />} />
+        </Routes>
+      </div>
     )
   }
 
   // Cycle complete -> cycle completion flow
   if (profile.isCycleComplete) {
     return (
-      <Routes>
-        <Route path="*" element={<CycleCompletionView />} />
-      </Routes>
+      <div className="h-full pt-safe">
+        <Routes>
+          <Route path="*" element={<CycleCompletionView />} />
+        </Routes>
+      </div>
     )
   }
 
   // Normal app with tabs
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pt-safe">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
           <Route path="/workout" element={<WorkoutView />} />
