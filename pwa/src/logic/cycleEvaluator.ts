@@ -54,7 +54,7 @@ export function evaluateCycle(
         const mainSets = setLogs.filter(
           (l) => l.sessionId === session.id && l.isMainLift,
         )
-        return mainSets.length === 6 && mainSets.every((l) => l.isCompleted)
+        return mainSets.length >= 6 && mainSets.every((l) => l.isCompleted)
       })
 
     // Check AMRAP sets

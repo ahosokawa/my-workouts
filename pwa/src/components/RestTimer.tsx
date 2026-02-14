@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { TimerIcon } from './Icons'
 
 interface RestTimerProps {
   lastSetTime: number  // timestamp ms
@@ -21,7 +22,7 @@ export default function RestTimer({ lastSetTime, onDismiss }: RestTimerProps) {
 
   return (
     <div className="mx-4 mb-2 flex items-center gap-3 p-3 bg-[#2c2c2e] rounded-2xl">
-      <span className="text-[#8e8e93]">⏱️</span>
+      <TimerIcon className="w-4 h-4 text-[#8e8e93]" />
       <span className="font-semibold tabular-nums">
         Rest: {minutes}:{String(seconds).padStart(2, '0')}
       </span>

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise } from './types'
 import { liftFromDay } from './types'
 
 // ============================================================
@@ -11,7 +11,7 @@ function roundToNearest5(value: number): number {
   return Math.floor(value / 5) * 5
 }
 
-function generateId(): string {
+export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
@@ -36,6 +36,8 @@ export interface ActiveWorkout {
   amrapReps: number
   accWeights: Record<string, string>
   accReps: Record<string, string>
+  mainWeights: Record<number, string>  // per-set weight overrides, keyed by set index
+  mainReps: Record<number, string>     // per-set rep overrides, keyed by set index
   lastSetTime: number | null
   showRestTimer: boolean
 }
@@ -48,6 +50,8 @@ const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
   amrapReps: 0,
   accWeights: {},
   accReps: {},
+  mainWeights: {},
+  mainReps: {},
   lastSetTime: null,
   showRestTimer: false,
 }
@@ -62,6 +66,8 @@ interface AppState {
   setLogs: SetLog[]
   wilksEntries: WilksEntry[]
   activeWorkout: ActiveWorkout
+  customAccessories: Record<number, AccessoryExercise[]> | null  // keyed by MainLift value
+  savedExercises: AccessoryExercise[]  // user's exercise library for re-use
 
   // Profile actions
   createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number) => void
@@ -77,6 +83,10 @@ interface AppState {
   
   // Wilks actions
   addWilksEntry: (entry: Omit<WilksEntry, 'id'>) => void
+
+  // Accessory actions
+  setCustomAccessories: (accessories: Record<number, AccessoryExercise[]>) => void
+  addSavedExercise: (exercise: AccessoryExercise) => void
 
   // Data management
   resetAll: () => void
@@ -100,6 +110,8 @@ export const useStore = create<AppState>()(
       setLogs: [],
       wilksEntries: [],
       activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
+      customAccessories: null,
+      savedExercises: [],
 
       createProfile: (squatRM, benchRM, deadliftRM, pressRM) => {
         const profile: UserProfile = {
@@ -221,14 +233,29 @@ export const useStore = create<AppState>()(
         }))
       },
 
+      setCustomAccessories: (accessories) => {
+        set({ customAccessories: accessories })
+      },
+
+      addSavedExercise: (exercise) => {
+        set((state) => {
+          // Avoid duplicates by name (case-insensitive)
+          const exists = state.savedExercises.some(
+            (e) => e.name.toLowerCase() === exercise.name.toLowerCase(),
+          )
+          if (exists) return state
+          return { savedExercises: [...state.savedExercises, exercise] }
+        })
+      },
+
       resetAll: () => {
-        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT } })
+        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, savedExercises: [] })
       },
 
       exportData: () => {
-        const { profile, sessions, setLogs, wilksEntries } = get()
+        const { profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises } = get()
         return JSON.stringify(
-          { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries },
+          { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises },
           null,
           2,
         )
@@ -242,6 +269,8 @@ export const useStore = create<AppState>()(
           sessions: data.sessions ?? [],
           setLogs: data.setLogs ?? [],
           wilksEntries: data.wilksEntries ?? [],
+          customAccessories: data.customAccessories ?? null,
+          savedExercises: data.savedExercises ?? [],
         })
       },
 
@@ -257,6 +286,17 @@ export const useStore = create<AppState>()(
         return liftFromDay(profile.currentDay)
       },
     }),
-    { name: 'my-workouts-storage' },
+    {
+      name: 'my-workouts-storage',
+      merge: (persisted, current) => {
+        const state = { ...current, ...(persisted as Partial<AppState>) }
+        // Ensure activeWorkout always has every expected field (handles old persisted shapes)
+        state.activeWorkout = { ...EMPTY_ACTIVE_WORKOUT, ...state.activeWorkout }
+        // Ensure new top-level fields have defaults
+        if (state.customAccessories === undefined) state.customAccessories = null
+        if (!Array.isArray(state.savedExercises)) state.savedExercises = []
+        return state
+      },
+    },
   ),
 )

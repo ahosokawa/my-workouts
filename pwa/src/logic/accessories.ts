@@ -27,7 +27,7 @@ const DEADLIFT_ACCESSORIES: AccessoryExercise[] = [
   { id: 'facepull', name: 'Band Face Pull', sets: 3, reps: 12, weightType: AccessoryWeightType.NoWeight },
 ]
 
-/** Day 4: Shoulder Press accessories */
+/** Day 4: Overhead Press accessories */
 const SHOULDER_PRESS_ACCESSORIES: AccessoryExercise[] = [
   { id: 'pullup', name: 'Pull Up', sets: 3, reps: 8, weightType: AccessoryWeightType.Bodyweight },
   { id: 'row', name: 'DB Bent Over Row', sets: 3, reps: 8, weightType: AccessoryWeightType.Standard },

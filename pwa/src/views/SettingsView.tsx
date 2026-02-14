@@ -93,7 +93,7 @@ export default function SettingsView() {
   }
 
   const liftDay = (day: number) => {
-    const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Shoulder Press' }
+    const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Overhead Press' }
     return names[day] ?? 'Unknown'
   }
 

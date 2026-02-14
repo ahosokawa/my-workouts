@@ -8,7 +8,6 @@ export default function PRBoardView() {
   if (completedMain.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="text-4xl mb-3">📊</div>
         <h2 className="font-semibold mb-1">No Data Yet</h2>
         <p className="text-sm text-[#8e8e93]">Complete workouts to populate the PR board.</p>
       </div>

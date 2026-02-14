@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, liftFromDay, AccessoryWeightType } from '../types'
 import type { PrescribedSet, AccessoryExercise } from '../types'
@@ -19,6 +19,7 @@ export default function WorkoutView() {
   const aw = useStore((s) => s.activeWorkout)
   const updateAW = useStore((s) => s.updateActiveWorkout)
   const clearAW = useStore((s) => s.clearActiveWorkout)
+  const customAccessories = useStore((s) => s.customAccessories)
 
   const [elapsed, setElapsed] = useState(0)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
@@ -29,7 +30,7 @@ export default function WorkoutView() {
 
   const tm = useStore.getState().getTrainingMax(lift)
   const sets = prescribedSets(tm, profile.currentWeek)
-  const accessories = getAccessories(lift)
+  const accessories = customAccessories?.[lift] ?? getAccessories(lift)
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
   // Derived sets from stored arrays
@@ -45,6 +46,26 @@ export default function WorkoutView() {
   }, [aw.isActive, aw.startTime])
 
   // ---- Helpers ----
+
+  /** Resolve effective weight for a main set (override or prescribed) */
+  function effectiveMainWeight(index: number): number {
+    const override = aw.mainWeights?.[index]
+    if (override !== undefined && override !== '') {
+      const n = Number(override)
+      if (n > 0) return n
+    }
+    return sets[index].weight
+  }
+
+  /** Resolve effective reps for a main set (override or prescribed) */
+  function effectiveMainReps(index: number): number {
+    const override = aw.mainReps?.[index]
+    if (override !== undefined && override !== '') {
+      const n = Number(override)
+      if (n > 0) return n
+    }
+    return sets[index].targetReps
+  }
 
   const defaultWeight = useCallback(
     (ex: AccessoryExercise): string => {
@@ -119,6 +140,8 @@ export default function WorkoutView() {
       completedAccessory: [],
       accWeights: w,
       accReps: r,
+      mainWeights: {},
+      mainReps: {},
       lastSetTime: null,
       showRestTimer: false,
     })
@@ -160,6 +183,14 @@ export default function WorkoutView() {
     updateAW({ completedAccessory: Array.from(next) })
   }
 
+  function updateMainWeight(index: number, value: string) {
+    updateAW({ mainWeights: { ...(aw.mainWeights ?? {}), [index]: value } })
+  }
+
+  function updateMainReps(index: number, value: string) {
+    updateAW({ mainReps: { ...(aw.mainReps ?? {}), [index]: value } })
+  }
+
   function updateAccWeight(exercise: AccessoryExercise, setIndex: number, value: string) {
     const next = { ...aw.accWeights }
     const key = `${exercise.name}-${setIndex}`
@@ -193,19 +224,21 @@ export default function WorkoutView() {
     for (let i = 0; i < sets.length; i++) {
       const s = sets[i]
       const completed = completedMain.has(i)
+      const weight = effectiveMainWeight(i)
+      const reps = effectiveMainReps(i)
       logEntries.push({
         exerciseName: liftDisplayName(lift),
         isMainLift: true,
         setIndex: i,
-        weight: s.weight,
-        targetReps: s.targetReps,
+        weight,
+        targetReps: reps,
         actualReps: s.isAMRAP ? aw.amrapReps : null,
         isAMRAP: s.isAMRAP,
         isCompleted: completed,
         completedAt: completed ? new Date().toISOString() : null,
       })
       if (s.isAMRAP && completed) {
-        curAmrapWeight = s.weight
+        curAmrapWeight = weight
         curAmrapReps = aw.amrapReps
       }
     }
@@ -299,7 +332,7 @@ export default function WorkoutView() {
             onClick={startSession}
             className="w-full mt-3 py-2.5 rounded-xl bg-[var(--color-accent)] font-semibold text-white text-center"
           >
-            ▶ Start Workout
+            Start Workout
           </button>
         )}
       </div>
@@ -321,6 +354,10 @@ export default function WorkoutView() {
               setAmrapReps={(v) => updateAW({ amrapReps: v })}
               bestE1RM={bestE1RM}
               minRepsToBeat={minRepsToBeat}
+              overrideWeight={aw.mainWeights?.[i]}
+              overrideReps={aw.mainReps?.[i]}
+              onWeightChange={(v) => updateMainWeight(i, v)}
+              onRepsChange={(v) => updateMainReps(i, v)}
               onToggle={() => toggleMain(i)}
             />
           ))}
@@ -400,7 +437,7 @@ export default function WorkoutView() {
           onClick={() => setShowFinishAlert(true)}
           className="w-full py-3 rounded-xl font-semibold text-[var(--color-green)] bg-[#1c1c1e] text-center"
         >
-          ✓ Finish Workout
+          Finish Workout
         </button>
       )}
 
@@ -435,7 +472,8 @@ export default function WorkoutView() {
 // ============================================================
 
 function MainSetCard({
-  set, index, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat, onToggle,
+  set, index, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
+  overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle,
 }: {
   set: PrescribedSet
   index: number
@@ -445,9 +483,50 @@ function MainSetCard({
   setAmrapReps: (v: number) => void
   bestE1RM: number | null
   minRepsToBeat: (target: number, weight: number) => number | null
+  overrideWeight: string | undefined
+  overrideReps: string | undefined
+  onWeightChange: (value: string) => void
+  onRepsChange: (value: string) => void
   onToggle: () => void
 }) {
-  const prTarget = bestE1RM !== null ? minRepsToBeat(bestE1RM, set.weight) : null
+  // Tap-to-edit: track which field is being edited
+  const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null)
+  const weightRef = useRef<HTMLInputElement>(null)
+  const repsRef = useRef<HTMLInputElement>(null)
+
+  // Effective values for display / PR calculation
+  const displayWeight = (overrideWeight !== undefined && overrideWeight !== '')
+    ? Number(overrideWeight) || set.weight
+    : set.weight
+  const displayReps = (overrideReps !== undefined && overrideReps !== '')
+    ? Number(overrideReps) || set.targetReps
+    : set.targetReps
+
+  const prTarget = bestE1RM !== null ? minRepsToBeat(bestE1RM, displayWeight) : null
+
+  const weightInputValue = overrideWeight !== undefined ? overrideWeight : String(set.weight)
+  const repsInputValue = overrideReps !== undefined ? overrideReps : String(set.targetReps)
+
+  // Auto-select input text when entering edit mode
+  function startEditWeight(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!isActive || isCompleted) return
+    // Seed the override with the prescribed value if not already overridden
+    if (overrideWeight === undefined) onWeightChange(String(set.weight))
+    setEditingField('weight')
+    setTimeout(() => weightRef.current?.select(), 0)
+  }
+
+  function startEditReps(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!isActive || isCompleted) return
+    if (overrideReps === undefined) onRepsChange(String(set.targetReps))
+    setEditingField('reps')
+    setTimeout(() => repsRef.current?.select(), 0)
+  }
+
+  const isWeightEdited = overrideWeight !== undefined && overrideWeight !== '' && Number(overrideWeight) !== set.weight
+  const isRepsEdited = overrideReps !== undefined && overrideReps !== '' && Number(overrideReps) !== set.targetReps
 
   return (
     <div
@@ -460,45 +539,92 @@ function MainSetCard({
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : 'text-[var(--color-accent)]'}`}>
-              {set.isWarmup ? 'Warmup' : 'Working'}
+            <span className={`text-[10px] font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : set.isSupplemental ? 'text-[var(--color-yellow)]' : 'text-[var(--color-accent)]'}`}>
+              {set.isWarmup ? 'Warmup' : set.isSupplemental ? '5x5' : 'Working'}
             </span>
             <span className="text-[10px] text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
           </div>
-          <div className="font-semibold text-sm">{set.weight > 0 ? `${set.weight} lbs` : 'Bar'}</div>
-          {set.weight > BARBELL_WEIGHT && <PlateBreakdown weight={set.weight} />}
+
+          {/* Weight: tap text to edit, blur to close */}
+          {editingField === 'weight' ? (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <input
+                ref={weightRef}
+                type="number"
+                inputMode="decimal"
+                value={weightInputValue}
+                onChange={(e) => onWeightChange(e.target.value)}
+                onBlur={() => setEditingField(null)}
+                autoFocus
+                className="w-16 text-sm font-semibold py-0.5 px-1"
+              />
+              <span className="text-xs text-[#8e8e93]">lbs</span>
+            </div>
+          ) : (
+            <div
+              className={`font-semibold text-sm ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isWeightEdited ? 'text-[var(--color-orange)]' : ''}`}
+              onClick={startEditWeight}
+            >
+              {displayWeight > 0 ? `${displayWeight} lbs` : 'Bar'}
+            </div>
+          )}
+          {displayWeight > BARBELL_WEIGHT && <PlateBreakdown weight={displayWeight} />}
         </div>
 
-        {/* Reps display */}
-        {!set.isAMRAP && <span className={`text-sm ${isCompleted ? 'text-[#8e8e93]' : ''}`}>{set.targetReps} reps</span>}
+        {/* Reps display: tap to edit */}
+        {!set.isAMRAP && editingField === 'reps' ? (
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <input
+              ref={repsRef}
+              type="number"
+              inputMode="numeric"
+              value={repsInputValue}
+              onChange={(e) => onRepsChange(e.target.value)}
+              onBlur={() => setEditingField(null)}
+              autoFocus
+              className="w-12 text-center text-sm py-0.5 px-1"
+            />
+            <span className="text-xs text-[#8e8e93]">reps</span>
+          </div>
+        ) : !set.isAMRAP ? (
+          <span
+            className={`text-sm ${isCompleted ? 'text-[#8e8e93]' : ''} ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isRepsEdited ? 'text-[var(--color-orange)]' : ''}`}
+            onClick={startEditReps}
+          >
+            {displayReps} reps
+          </span>
+        ) : null}
+
         {set.isAMRAP && isCompleted && <span className="text-sm font-bold text-[var(--color-green)]">{amrapReps} reps</span>}
         {set.isAMRAP && !isActive && !isCompleted && <span className="text-sm">{set.targetReps}+ reps</span>}
       </div>
 
-      {/* AMRAP stepper */}
+      {/* AMRAP stepper + optional weight edit */}
       {set.isAMRAP && isActive && !isCompleted && (
-        <div className="mt-2 ml-8 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-          <span className="text-xs text-[#8e8e93]">Reps:</span>
-          <button
-            onClick={() => setAmrapReps(Math.max(0, amrapReps - 1))}
-            className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
-          >
-            −
-          </button>
-          <span className="text-lg font-bold tabular-nums w-8 text-center">{amrapReps}</span>
-          <button
-            onClick={() => setAmrapReps(amrapReps + 1)}
-            className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
-          >
-            +
-          </button>
+        <div className="mt-2 ml-8 space-y-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[#8e8e93]">Reps:</span>
+            <button
+              onClick={() => setAmrapReps(Math.max(0, amrapReps - 1))}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
+            >
+              −
+            </button>
+            <span className="text-lg font-bold tabular-nums w-8 text-center">{amrapReps}</span>
+            <button
+              onClick={() => setAmrapReps(amrapReps + 1)}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
+            >
+              +
+            </button>
 
-          {/* PR hint */}
-          {prTarget !== null && (
-            <span className="text-[10px] text-[#8e8e93] ml-2">
-              {prTarget}+ to beat PR ({Math.round(bestE1RM!)} lbs)
-            </span>
-          )}
+            {/* PR hint */}
+            {prTarget !== null && (
+              <span className="text-[10px] text-[#8e8e93] ml-2">
+                {prTarget}+ to beat PR ({Math.round(bestE1RM!)} lbs)
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>

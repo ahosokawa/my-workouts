@@ -11,7 +11,6 @@ export default function HistoryView() {
   if (sorted.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
-        <div className="text-4xl mb-3">📋</div>
         <h2 className="font-semibold mb-1">No Workouts Yet</h2>
         <p className="text-sm text-[#8e8e93]">Complete a workout to see it here.</p>
       </div>

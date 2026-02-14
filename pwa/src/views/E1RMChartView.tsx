@@ -125,7 +125,6 @@ export default function E1RMChartView() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <div className="text-4xl mb-3">📈</div>
           <p className="text-sm text-[#8e8e93]">Complete AMRAP sets for {liftName} to see your estimated 1RM over time.</p>
         </div>
       )}

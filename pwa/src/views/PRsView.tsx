@@ -58,7 +58,7 @@ export default function PRsView() {
       {/* Tab content */}
       {tab === 'e1rm' && (
         amrapLogs.length === 0 ? (
-          <EmptyState icon="🏆" title="No PRs Yet" message="Complete AMRAP sets to see your personal records." />
+          <EmptyState title="No PRs Yet" message="Complete AMRAP sets to see your personal records." />
         ) : (
           <div className="space-y-4">
             {/* Est 1RM */}
@@ -103,7 +103,6 @@ export default function PRsView() {
                   const best = bestE1RM(lift)
                   return (
                     <div key={lift} className="flex items-center gap-3 py-2">
-                      <span className="text-lg">🏆</span>
                       <div className="flex-1">
                         <div className="text-sm font-medium">{liftDisplayName(lift)}</div>
                         {best && <div className="text-xs text-[#8e8e93]">{Math.round(best.weight)} lbs x {best.reps} reps</div>}
@@ -129,7 +128,7 @@ export default function PRsView() {
           const sorted = [...wilksEntries].sort((a, b) => b.date.localeCompare(a.date))
           const latest = sorted[0]
           if (!latest) {
-            return <EmptyState icon="📊" title="No Wilks Data" message="Complete AMRAP sets and enter your body weight to calculate your Wilks score." />
+            return <EmptyState title="No Wilks Data" message="Complete AMRAP sets and enter your body weight to calculate your Wilks score." />
           }
           return (
             <div className="space-y-4">
@@ -191,10 +190,9 @@ export default function PRsView() {
   )
 }
 
-function EmptyState({ icon, title, message }: { icon: string; title: string; message: string }) {
+function EmptyState({ title, message }: { title: string; message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-4xl mb-3">{icon}</div>
       <h2 className="font-semibold mb-1">{title}</h2>
       <p className="text-sm text-[#8e8e93]">{message}</p>
     </div>

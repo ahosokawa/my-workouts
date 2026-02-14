@@ -1,7 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount } from '../types'
+import type { AccessoryExercise } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
+import { getAccessories } from '../logic/accessories'
+import AccessoryEditor from '../components/AccessoryEditor'
 
 export default function CycleCompletionView() {
   const profile = useStore((s) => s.profile)
@@ -9,6 +12,8 @@ export default function CycleCompletionView() {
   const setLogs = useStore((s) => s.setLogs)
   const updateProfile = useStore((s) => s.updateProfile)
   const startNewCycle = useStore((s) => s.startNewCycle)
+  const customAccessories = useStore((s) => s.customAccessories)
+  const setCustomAccessories = useStore((s) => s.setCustomAccessories)
 
   if (!profile) return null
 
@@ -36,6 +41,17 @@ export default function CycleCompletionView() {
       : '',
   )
 
+  // Per-day accessory state: initialise from last cycle's custom accessories or defaults
+  const [dayAccessories, setDayAccessories] = useState<Record<number, AccessoryExercise[]>>(() => {
+    const m: Record<number, AccessoryExercise[]> = {}
+    for (const lift of MAIN_LIFTS) {
+      m[lift] = customAccessories?.[lift]
+        ? customAccessories[lift].map((ex) => ({ ...ex }))
+        : getAccessories(lift).map((ex) => ({ ...ex, id: ex.id }))
+    }
+    return m
+  })
+
   const tmMap: Record<number, number> = {
     [MainLift.Squat]: profile.squatTM,
     [MainLift.BenchPress]: profile.benchTM,
@@ -57,6 +73,10 @@ export default function CycleCompletionView() {
       pressTM: sp,
       ...(bw > 0 ? { bodyWeightLbs: bw, bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
+
+    // Save custom accessories
+    setCustomAccessories(dayAccessories)
+
     startNewCycle()
   }
 
@@ -64,7 +84,6 @@ export default function CycleCompletionView() {
     <div className="min-h-full flex flex-col p-6">
       {/* Header */}
       <div className="text-center mb-6">
-        <div className="text-5xl mb-3">{cycleResult.isSuccessful ? '🎉' : '💪'}</div>
         <h1 className="text-2xl font-bold mb-1">Cycle {profile.cycleNumber} Complete</h1>
         <p className="text-sm text-[#8e8e93]">
           {cycleResult.isSuccessful
@@ -86,7 +105,7 @@ export default function CycleCompletionView() {
               <div key={lift} className="py-3">
                 <div className="flex items-center gap-2">
                   <span className={`text-lg ${passed ? 'text-[var(--color-green)]' : 'text-[var(--color-orange)]'}`}>
-                    {passed ? '✓' : '⚠️'}
+                    {passed ? '✓' : '!'}
                   </span>
                   <span className="font-medium text-sm">{liftDisplayName(lift)}</span>
                 </div>
@@ -139,7 +158,7 @@ export default function CycleCompletionView() {
       </div>
 
       {/* New Training Maxes */}
-      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-6">
+      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">New Training Maxes</h2>
         </div>
@@ -181,6 +200,11 @@ export default function CycleCompletionView() {
             )
           })}
         </div>
+      </div>
+
+      {/* Day-by-Day Accessory Preview / Editor */}
+      <div className="mb-6">
+        <AccessoryEditor value={dayAccessories} onChange={setDayAccessories} />
       </div>
 
       <div className="flex-1" />

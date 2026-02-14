@@ -21,7 +21,7 @@ export function liftDisplayName(lift: MainLift): string {
     case MainLift.Squat: return 'Squat'
     case MainLift.BenchPress: return 'Bench Press'
     case MainLift.Deadlift: return 'Deadlift'
-    case MainLift.ShoulderPress: return 'Shoulder Press'
+    case MainLift.ShoulderPress: return 'Overhead Press'
   }
 }
 
@@ -127,6 +127,7 @@ export interface PrescribedSet {
   targetReps: number
   isWarmup: boolean
   isAMRAP: boolean
+  isSupplemental: boolean  // 5x5 FSL sets after AMRAP
   weight: number
 }
 
