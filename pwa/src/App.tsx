@@ -10,21 +10,13 @@ import PRsView from './views/PRsView'
 import E1RMChartView from './views/E1RMChartView'
 import SettingsView from './views/SettingsView'
 
-const shellStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-}
-
 export default function App() {
   const profile = useStore((s) => s.profile)
 
   // No profile yet -> onboarding
   if (!profile) {
     return (
-      <div style={shellStyle} className="overflow-y-auto overscroll-none pt-safe">
+      <div className="h-full overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="*" element={<OnboardingView />} />
         </Routes>
@@ -35,7 +27,7 @@ export default function App() {
   // Cycle complete -> cycle completion flow
   if (profile.isCycleComplete) {
     return (
-      <div style={shellStyle} className="overflow-y-auto overscroll-none pt-safe">
+      <div className="h-full overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="*" element={<CycleCompletionView />} />
         </Routes>
@@ -45,7 +37,7 @@ export default function App() {
 
   // Normal app with tabs
   return (
-    <div style={shellStyle} className="flex flex-col">
+    <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
