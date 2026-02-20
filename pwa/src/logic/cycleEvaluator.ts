@@ -88,7 +88,7 @@ export function evaluateCycle(
   }
 
   const isSuccessful = Object.values(liftResults).every(
-    (r) => r.allMainSetsCompleted && r.amrapMet,
+    (r) => r.amrapMet,
   )
 
   return { isSuccessful, liftResults }
@@ -113,7 +113,8 @@ export function suggestedTMs(
 
   for (const lift of MAIN_LIFTS) {
     const currentTM = tmMap[lift]
-    if (cycleResult.isSuccessful) {
+    const result = cycleResult.liftResults[lift]
+    if (result && result.amrapMet) {
       suggested[lift] = currentTM + liftProgressionAmount(lift)
     } else {
       suggested[lift] = currentTM

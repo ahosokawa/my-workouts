@@ -87,8 +87,8 @@ export default function CycleCompletionView() {
         <h1 className="text-2xl font-bold mb-1">Cycle {profile.cycleNumber} Complete</h1>
         <p className="text-sm text-[#8e8e93]">
           {cycleResult.isSuccessful
-            ? 'All lifts met their targets! Training maxes will increase.'
-            : 'Some targets were not met. Review and adjust your training maxes.'}
+            ? 'All AMRAP targets met! Training maxes will increase.'
+            : 'Some AMRAP targets were not met. Review and adjust your training maxes.'}
         </p>
       </div>
 
@@ -100,12 +100,12 @@ export default function CycleCompletionView() {
         <div className="px-4 pb-3 divide-y divide-[#38383a]">
           {MAIN_LIFTS.map((lift) => {
             const result = cycleResult.liftResults[lift]
-            const passed = result && result.allMainSetsCompleted && result.amrapMet
+            const amrapPassed = result && result.amrapMet
             return (
               <div key={lift} className="py-3">
                 <div className="flex items-center gap-2">
-                  <span className={`text-lg ${passed ? 'text-[var(--color-green)]' : 'text-[var(--color-orange)]'}`}>
-                    {passed ? '✓' : '!'}
+                  <span className={`text-lg ${amrapPassed ? 'text-[var(--color-green)]' : 'text-[var(--color-orange)]'}`}>
+                    {amrapPassed ? '✓' : '!'}
                   </span>
                   <span className="font-medium text-sm">{liftDisplayName(lift)}</span>
                 </div>
@@ -175,7 +175,7 @@ export default function CycleCompletionView() {
                     <div className="font-medium text-sm">{liftDisplayName(lift)}</div>
                     <div className="text-xs text-[#8e8e93]">
                       Current: {current} lbs
-                      {cycleResult.isSuccessful && (
+                      {cycleResult.liftResults[lift]?.amrapMet && (
                         <span className="text-[var(--color-green)]"> (+{liftProgressionAmount(lift)})</span>
                       )}
                     </div>

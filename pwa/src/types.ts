@@ -58,6 +58,7 @@ export enum AccessoryWeightType {
   Standard = 'standard',
   Bodyweight = 'bodyweight',
   NoWeight = 'noWeight',
+  Barbell = 'barbell',
 }
 
 // ============================================================

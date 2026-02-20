@@ -21,13 +21,20 @@ export default function RestTimer({ lastSetTime, onDismiss }: RestTimerProps) {
   const seconds = elapsed % 60
 
   return (
-    <div className="mx-4 mb-2 flex items-center gap-3 p-3 bg-[#2c2c2e] rounded-2xl">
-      <TimerIcon className="w-4 h-4 text-[#8e8e93]" />
-      <span className="font-semibold tabular-nums">
-        Rest: {minutes}:{String(seconds).padStart(2, '0')}
-      </span>
-      <div className="flex-1" />
-      <button onClick={onDismiss} className="text-[#8e8e93] text-xl leading-none">✕</button>
+    <div className="sticky top-0 z-30 -mx-4 px-4 py-2.5 bg-[#0a0a0a]/95 backdrop-blur-sm border-b border-[#38383a]">
+      <div className="flex items-center gap-3">
+        <TimerIcon className="w-4 h-4 text-[#8e8e93]" />
+        <span className="font-semibold tabular-nums text-base">
+          Rest: {minutes}:{String(seconds).padStart(2, '0')}
+        </span>
+        <div className="flex-1" />
+        <button
+          onClick={(e) => { e.stopPropagation(); onDismiss() }}
+          className="text-[#8e8e93] text-lg leading-none px-2 py-1"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }

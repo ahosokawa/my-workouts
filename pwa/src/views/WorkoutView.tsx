@@ -23,6 +23,7 @@ export default function WorkoutView() {
 
   const [elapsed, setElapsed] = useState(0)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
 
   if (!profile) return null
   const lift = liftFromDay(profile.currentDay)
@@ -33,9 +34,40 @@ export default function WorkoutView() {
   const accessories = customAccessories?.[lift] ?? getAccessories(lift)
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
-  // Derived sets from stored arrays
   const completedMain = useMemo(() => new Set(aw.completedMain), [aw.completedMain])
   const completedAccessory = useMemo(() => new Set(aw.completedAccessory), [aw.completedAccessory])
+
+  // Split main sets into warmup+working and supplemental
+  const warmupWorkingIndices = sets.map((s, i) => ({ set: s, index: i })).filter(({ set }) => !set.isSupplemental)
+  const supplementalIndices = sets.map((s, i) => ({ set: s, index: i })).filter(({ set }) => set.isSupplemental)
+
+  // Reset collapsed state when workout identity changes (e.g. after finishing a workout)
+  useEffect(() => {
+    setCollapsedSections(new Set())
+  }, [profile.currentDay, profile.currentWeek, profile.cycleNumber])
+
+  // Auto-collapse completed sections
+  useEffect(() => {
+    if (!aw.isActive) return
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+
+      const allWarmupWorkingDone = warmupWorkingIndices.length > 0 && warmupWorkingIndices.every(({ index }) => completedMain.has(index))
+      if (allWarmupWorkingDone && !prev.has('warmup-working')) next.add('warmup-working')
+
+      const allSuppDone = supplementalIndices.length > 0 && supplementalIndices.every(({ index }) => completedMain.has(index))
+      if (allSuppDone && !prev.has('supplemental')) next.add('supplemental')
+
+      for (const ex of accessories) {
+        const sectionId = `acc-${ex.name}`
+        const allDone = Array.from({ length: ex.sets }, (_, i) => `${ex.name}-${i}`).every((k) => completedAccessory.has(k))
+        if (allDone && !prev.has(sectionId)) next.add(sectionId)
+      }
+
+      if (next.size !== prev.size) return next
+      return prev
+    })
+  }, [aw.completedMain, aw.completedAccessory, aw.isActive])
 
   // Elapsed timer
   useEffect(() => {
@@ -47,7 +79,15 @@ export default function WorkoutView() {
 
   // ---- Helpers ----
 
-  /** Resolve effective weight for a main set (override or prescribed) */
+  function toggleSection(sectionId: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) next.delete(sectionId)
+      else next.add(sectionId)
+      return next
+    })
+  }
+
   function effectiveMainWeight(index: number): number {
     const override = aw.mainWeights?.[index]
     if (override !== undefined && override !== '') {
@@ -57,7 +97,6 @@ export default function WorkoutView() {
     return sets[index].weight
   }
 
-  /** Resolve effective reps for a main set (override or prescribed) */
   function effectiveMainReps(index: number): number {
     const override = aw.mainReps?.[index]
     if (override !== undefined && override !== '') {
@@ -78,7 +117,7 @@ export default function WorkoutView() {
         if (profile?.bodyWeightLbs && profile.bodyWeightLbs > 0) return String(Math.round(profile.bodyWeightLbs))
         if (last) return String(Math.round(last.weight))
       }
-      if (ex.weightType === AccessoryWeightType.Standard && last) {
+      if ((ex.weightType === AccessoryWeightType.Standard || ex.weightType === AccessoryWeightType.Barbell) && last) {
         return String(Math.round(last.weight))
       }
       return ''
@@ -132,6 +171,7 @@ export default function WorkoutView() {
         r[key] = dr
       }
     }
+    setCollapsedSections(new Set())
     updateAW({
       isActive: true,
       startTime: Date.now(),
@@ -310,6 +350,9 @@ export default function WorkoutView() {
   const fmtElapsed = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
   const bestE1RM = currentBestE1RM()
 
+  const warmupWorkingComplete = warmupWorkingIndices.every(({ index }) => completedMain.has(index))
+  const supplementalComplete = supplementalIndices.every(({ index }) => completedMain.has(index))
+
   // ---- Render ----
   return (
     <div className="p-4 pb-2 space-y-4">
@@ -317,146 +360,248 @@ export default function WorkoutView() {
       <div className="bg-[#1c1c1e] rounded-xl p-4">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-lg font-bold">Week {profile.currentWeek}: {liftDisplayName(lift)}</h1>
-            <p className="text-xs text-[#8e8e93]">Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4</p>
+            <h1 className="text-xl font-bold">Week {profile.currentWeek}: {liftDisplayName(lift)}</h1>
+            <p className="text-sm text-[#8e8e93]">Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4</p>
           </div>
           {aw.isActive && (
             <div className="text-right">
-              <div className="text-lg font-medium tabular-nums">{fmtElapsed}</div>
-              <div className="text-[10px] text-[#8e8e93]">Elapsed</div>
+              <div className="text-xl font-medium tabular-nums">{fmtElapsed}</div>
+              <div className="text-xs text-[#8e8e93]">Elapsed</div>
             </div>
           )}
         </div>
         {!aw.isActive && (
           <button
             onClick={startSession}
-            className="w-full mt-3 py-2.5 rounded-xl bg-[var(--color-accent)] font-semibold text-white text-center"
+            className="w-full mt-3 py-3 rounded-xl bg-[var(--color-accent)] font-semibold text-white text-center text-base"
           >
             Start Workout
           </button>
         )}
       </div>
 
-      {/* Main Lift Sets */}
+      {/* Rest Timer - sticky inline bar */}
+      {aw.showRestTimer && aw.lastSetTime && (
+        <RestTimer lastSetTime={aw.lastSetTime} onDismiss={() => updateAW({ showRestTimer: false })} />
+      )}
+
+      {/* Warmups + 5/3/1 Working Sets */}
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden">
-        <div className="px-4 pt-3 pb-1">
-          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">{liftDisplayName(lift)}</h2>
+        <button
+          onClick={() => toggleSection('warmup-working')}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm uppercase tracking-wider text-[#8e8e93]">Warmups + 5/3/1</h2>
+            {aw.isActive && warmupWorkingComplete && (
+              <span className="text-xs text-[var(--color-green)]">✓ {warmupWorkingIndices.length}/{warmupWorkingIndices.length}</span>
+            )}
+          </div>
+          <span className={`text-[#8e8e93] text-sm transition-transform duration-200 ${collapsedSections.has('warmup-working') ? '' : 'rotate-90'}`}>
+            ›
+          </span>
+        </button>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateRows: collapsedSections.has('warmup-working') ? '0fr' : '1fr',
+            transition: 'grid-template-rows 300ms ease',
+          }}
+        >
+          <div style={{ overflow: 'hidden' }}>
+            <div className="px-4 pb-3 divide-y divide-[#38383a]">
+              {warmupWorkingIndices.map(({ set: s, index: i }) => (
+                <MainSetCard
+                  key={s.id}
+                  set={s}
+                  isActive={aw.isActive}
+                  isCompleted={completedMain.has(i)}
+                  amrapReps={aw.amrapReps}
+                  setAmrapReps={(v) => updateAW({ amrapReps: v })}
+                  bestE1RM={bestE1RM}
+                  minRepsToBeat={minRepsToBeat}
+                  overrideWeight={aw.mainWeights?.[i]}
+                  overrideReps={aw.mainReps?.[i]}
+                  onWeightChange={(v) => updateMainWeight(i, v)}
+                  onRepsChange={(v) => updateMainReps(i, v)}
+                  onToggle={() => toggleMain(i)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="px-4 pb-3 divide-y divide-[#38383a]">
-          {sets.map((s, i) => (
-            <MainSetCard
-              key={s.id}
-              set={s}
-              index={i}
-              isActive={aw.isActive}
-              isCompleted={completedMain.has(i)}
-              amrapReps={aw.amrapReps}
-              setAmrapReps={(v) => updateAW({ amrapReps: v })}
-              bestE1RM={bestE1RM}
-              minRepsToBeat={minRepsToBeat}
-              overrideWeight={aw.mainWeights?.[i]}
-              overrideReps={aw.mainReps?.[i]}
-              onWeightChange={(v) => updateMainWeight(i, v)}
-              onRepsChange={(v) => updateMainReps(i, v)}
-              onToggle={() => toggleMain(i)}
-            />
-          ))}
+      </div>
+
+      {/* 5x5 Supplemental Sets */}
+      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden">
+        <button
+          onClick={() => toggleSection('supplemental')}
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm uppercase tracking-wider text-[#8e8e93]">5x5 FSL – {liftDisplayName(lift)}</h2>
+            {aw.isActive && supplementalComplete && (
+              <span className="text-xs text-[var(--color-green)]">✓ {supplementalIndices.length}/{supplementalIndices.length}</span>
+            )}
+          </div>
+          <span className={`text-[#8e8e93] text-sm transition-transform duration-200 ${collapsedSections.has('supplemental') ? '' : 'rotate-90'}`}>
+            ›
+          </span>
+        </button>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateRows: collapsedSections.has('supplemental') ? '0fr' : '1fr',
+            transition: 'grid-template-rows 300ms ease',
+          }}
+        >
+          <div style={{ overflow: 'hidden' }}>
+            <div className="px-4 pb-3 divide-y divide-[#38383a]">
+              {supplementalIndices.map(({ set: s, index: i }) => (
+                <MainSetCard
+                  key={s.id}
+                  set={s}
+                  isActive={aw.isActive}
+                  isCompleted={completedMain.has(i)}
+                  amrapReps={aw.amrapReps}
+                  setAmrapReps={(v) => updateAW({ amrapReps: v })}
+                  bestE1RM={bestE1RM}
+                  minRepsToBeat={minRepsToBeat}
+                  overrideWeight={aw.mainWeights?.[i]}
+                  overrideReps={aw.mainReps?.[i]}
+                  onWeightChange={(v) => updateMainWeight(i, v)}
+                  onRepsChange={(v) => updateMainReps(i, v)}
+                  onToggle={() => toggleMain(i)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Accessories */}
-      {accessories.map((ex) => (
-        <div key={ex.id} className="bg-[#1c1c1e] rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">{ex.name}</h2>
-            <span className="text-xs text-[#8e8e93]">{ex.sets}x{ex.reps}</span>
-          </div>
-          <div className="px-4 pb-3 divide-y divide-[#38383a]">
-            {Array.from({ length: ex.sets }, (_, si) => {
-              const key = `${ex.name}-${si}`
-              const completed = completedAccessory.has(key)
-              return (
-                <div
-                  key={key}
-                  className={`flex items-center gap-3 py-2.5 ${completed ? 'opacity-50' : ''}`}
-                  onClick={() => toggleAccessory(key)}
-                >
-                  <span className={`text-xl ${completed ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
-                    {completed ? '✓' : '○'}
-                  </span>
-                  <span className="text-sm">Set {si + 1}</span>
-                  <div className="flex-1" />
+      {accessories.map((ex) => {
+        const sectionId = `acc-${ex.name}`
+        const accKeys = Array.from({ length: ex.sets }, (_, i) => `${ex.name}-${i}`)
+        const allAccDone = accKeys.every((k) => completedAccessory.has(k))
+        return (
+          <div key={ex.id} className="bg-[#1c1c1e] rounded-xl overflow-hidden">
+            <button
+              onClick={() => toggleSection(sectionId)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm uppercase tracking-wider text-[#8e8e93]">{ex.name}</h2>
+                {aw.isActive && allAccDone && (
+                  <span className="text-xs text-[var(--color-green)]">✓ {ex.sets}/{ex.sets}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#8e8e93]">{ex.sets}x{ex.reps}</span>
+                <span className={`text-[#8e8e93] text-sm transition-transform duration-200 ${collapsedSections.has(sectionId) ? '' : 'rotate-90'}`}>
+                  ›
+                </span>
+              </div>
+            </button>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateRows: collapsedSections.has(sectionId) ? '0fr' : '1fr',
+                transition: 'grid-template-rows 300ms ease',
+              }}
+            >
+              <div style={{ overflow: 'hidden' }}>
+                <div className="px-4 pb-3 divide-y divide-[#38383a]">
+                  {Array.from({ length: ex.sets }, (_, si) => {
+                    const key = `${ex.name}-${si}`
+                    const completed = completedAccessory.has(key)
+                    const accWeight = Number(aw.accWeights[key] || defaultWeight(ex)) || 0
+                    return (
+                      <div
+                        key={key}
+                        className={`py-4 ${completed ? 'opacity-50' : ''}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => toggleAccessory(key)}
+                            className="flex items-center justify-center w-11 h-11 -ml-1 shrink-0"
+                            aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
+                          >
+                            <span className={`text-2xl ${completed ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
+                              {completed ? '✓' : '○'}
+                            </span>
+                          </button>
+                          <span className="text-base">Set {si + 1}</span>
+                          <div className="flex-1" />
 
-                  {/* Weight */}
-                  {ex.weightType !== AccessoryWeightType.NoWeight && (
-                    aw.isActive && !completed ? (
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        placeholder="lbs"
-                        value={aw.accWeights[key] ?? ''}
-                        onChange={(e) => { e.stopPropagation(); updateAccWeight(ex, si, e.target.value) }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-16 text-right text-sm py-1 px-2"
-                      />
-                    ) : (
-                      (() => {
-                        const w = aw.accWeights[key] || defaultWeight(ex)
-                        const n = Number(w)
-                        return n > 0 ? <span className="text-sm text-[#8e8e93]">{Math.round(n)} lbs</span> : null
-                      })()
+                          {/* Weight */}
+                          {ex.weightType !== AccessoryWeightType.NoWeight && (
+                            aw.isActive && !completed ? (
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="lbs"
+                                value={aw.accWeights[key] ?? ''}
+                                onChange={(e) => { e.stopPropagation(); updateAccWeight(ex, si, e.target.value) }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-16 text-right text-base py-1 px-2"
+                              />
+                            ) : (
+                              accWeight > 0 ? <span className="text-base text-[#8e8e93]">{Math.round(accWeight)} lbs</span> : null
+                            )
+                          )}
+
+                          {/* Reps */}
+                          {aw.isActive && !completed ? (
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              placeholder="reps"
+                              value={aw.accReps[key] ?? String(ex.reps)}
+                              onChange={(e) => { e.stopPropagation(); updateAccRep(ex, si, e.target.value) }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-14 text-center text-base py-1 px-1"
+                            />
+                          ) : (
+                            <span className={`text-base ${completed ? 'text-[#8e8e93]' : ''}`}>
+                              {aw.accReps[key] || ex.reps} reps
+                            </span>
+                          )}
+                        </div>
+                        {ex.weightType === AccessoryWeightType.Barbell && accWeight > BARBELL_WEIGHT && (
+                          <div className="ml-10 mt-1">
+                            <PlateBreakdown weight={accWeight} />
+                          </div>
+                        )}
+                      </div>
                     )
-                  )}
-
-                  {/* Reps */}
-                  {aw.isActive && !completed ? (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="reps"
-                      value={aw.accReps[key] ?? String(ex.reps)}
-                      onChange={(e) => { e.stopPropagation(); updateAccRep(ex, si, e.target.value) }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-12 text-center text-sm py-1 px-1"
-                    />
-                  ) : (
-                    <span className={`text-sm ${completed ? 'text-[#8e8e93]' : ''}`}>
-                      {aw.accReps[key] || ex.reps} reps
-                    </span>
-                  )}
+                  })}
                 </div>
-              )
-            })}
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {/* Finish Button */}
       {aw.isActive && (
         <button
           onClick={() => setShowFinishAlert(true)}
-          className="w-full py-3 rounded-xl font-semibold text-[var(--color-green)] bg-[#1c1c1e] text-center"
+          className="w-full py-3.5 rounded-xl font-semibold text-base text-[var(--color-green)] bg-[#1c1c1e] text-center"
         >
           Finish Workout
         </button>
-      )}
-
-      {/* Rest Timer */}
-      {aw.showRestTimer && aw.lastSetTime && (
-        <div className="fixed bottom-14 left-0 right-0 z-40">
-          <RestTimer lastSetTime={aw.lastSetTime} onDismiss={() => updateAW({ showRestTimer: false })} />
-        </div>
       )}
 
       {/* Finish Alert */}
       {showFinishAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setShowFinishAlert(false)}>
           <div className="bg-[#2c2c2e] rounded-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold mb-2">Finish Workout?</h3>
-            <p className="text-sm text-[#8e8e93] mb-5">This will save your workout and move to the next session.</p>
+            <h3 className="font-semibold text-lg mb-2">Finish Workout?</h3>
+            <p className="text-base text-[#8e8e93] mb-5">This will save your workout and move to the next session.</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowFinishAlert(false)} className="flex-1 py-2 rounded-lg bg-[#38383a] text-sm">Cancel</button>
-              <button onClick={finishWorkout} className="flex-1 py-2 rounded-lg bg-[var(--color-green)] text-sm font-semibold text-white">
+              <button onClick={() => setShowFinishAlert(false)} className="flex-1 py-3 rounded-lg bg-[#38383a] text-base">Cancel</button>
+              <button onClick={finishWorkout} className="flex-1 py-3 rounded-lg bg-[var(--color-green)] text-base font-semibold text-white">
                 Finish
               </button>
             </div>
@@ -472,11 +617,10 @@ export default function WorkoutView() {
 // ============================================================
 
 function MainSetCard({
-  set, index, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
+  set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
   overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle,
 }: {
   set: PrescribedSet
-  index: number
   isActive: boolean
   isCompleted: boolean
   amrapReps: number
@@ -489,12 +633,10 @@ function MainSetCard({
   onRepsChange: (value: string) => void
   onToggle: () => void
 }) {
-  // Tap-to-edit: track which field is being edited
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null)
   const weightRef = useRef<HTMLInputElement>(null)
   const repsRef = useRef<HTMLInputElement>(null)
 
-  // Effective values for display / PR calculation
   const displayWeight = (overrideWeight !== undefined && overrideWeight !== '')
     ? Number(overrideWeight) || set.weight
     : set.weight
@@ -507,11 +649,9 @@ function MainSetCard({
   const weightInputValue = overrideWeight !== undefined ? overrideWeight : String(set.weight)
   const repsInputValue = overrideReps !== undefined ? overrideReps : String(set.targetReps)
 
-  // Auto-select input text when entering edit mode
   function startEditWeight(e: React.MouseEvent) {
     e.stopPropagation()
     if (!isActive || isCompleted) return
-    // Seed the override with the prescribed value if not already overridden
     if (overrideWeight === undefined) onWeightChange(String(set.weight))
     setEditingField('weight')
     setTimeout(() => weightRef.current?.select(), 0)
@@ -529,20 +669,23 @@ function MainSetCard({
   const isRepsEdited = overrideReps !== undefined && overrideReps !== '' && Number(overrideReps) !== set.targetReps
 
   return (
-    <div
-      className={`py-3 ${isCompleted && !set.isAMRAP ? 'opacity-50' : ''} ${isActive ? 'cursor-pointer' : ''}`}
-      onClick={onToggle}
-    >
+    <div className={`py-4 ${isCompleted && !set.isAMRAP ? 'opacity-50' : ''}`}>
       <div className="flex items-center gap-3">
-        <span className={`text-xl ${isCompleted ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
-          {isCompleted ? '✓' : '○'}
-        </span>
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center w-11 h-11 -ml-1 shrink-0"
+          aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+        >
+          <span className={`text-2xl ${isCompleted ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
+            {isCompleted ? '✓' : '○'}
+          </span>
+        </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : set.isSupplemental ? 'text-[var(--color-yellow)]' : 'text-[var(--color-accent)]'}`}>
+            <span className={`text-xs font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : set.isSupplemental ? 'text-[var(--color-yellow)]' : 'text-[var(--color-accent)]'}`}>
               {set.isWarmup ? 'Warmup' : set.isSupplemental ? '5x5' : 'Working'}
             </span>
-            <span className="text-[10px] text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
+            <span className="text-xs text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
           </div>
 
           {/* Weight: tap text to edit, blur to close */}
@@ -556,13 +699,13 @@ function MainSetCard({
                 onChange={(e) => onWeightChange(e.target.value)}
                 onBlur={() => setEditingField(null)}
                 autoFocus
-                className="w-16 text-sm font-semibold py-0.5 px-1"
+                className="w-20 text-base font-semibold py-0.5 px-1"
               />
-              <span className="text-xs text-[#8e8e93]">lbs</span>
+              <span className="text-sm text-[#8e8e93]">lbs</span>
             </div>
           ) : (
             <div
-              className={`font-semibold text-sm ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isWeightEdited ? 'text-[var(--color-orange)]' : ''}`}
+              className={`font-semibold text-base ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isWeightEdited ? 'text-[var(--color-orange)]' : ''}`}
               onClick={startEditWeight}
             >
               {displayWeight > 0 ? `${displayWeight} lbs` : 'Bar'}
@@ -582,45 +725,44 @@ function MainSetCard({
               onChange={(e) => onRepsChange(e.target.value)}
               onBlur={() => setEditingField(null)}
               autoFocus
-              className="w-12 text-center text-sm py-0.5 px-1"
+              className="w-14 text-center text-base py-0.5 px-1"
             />
-            <span className="text-xs text-[#8e8e93]">reps</span>
+            <span className="text-sm text-[#8e8e93]">reps</span>
           </div>
         ) : !set.isAMRAP ? (
           <span
-            className={`text-sm ${isCompleted ? 'text-[#8e8e93]' : ''} ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isRepsEdited ? 'text-[var(--color-orange)]' : ''}`}
+            className={`text-base ${isCompleted ? 'text-[#8e8e93]' : ''} ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isRepsEdited ? 'text-[var(--color-orange)]' : ''}`}
             onClick={startEditReps}
           >
             {displayReps} reps
           </span>
         ) : null}
 
-        {set.isAMRAP && isCompleted && <span className="text-sm font-bold text-[var(--color-green)]">{amrapReps} reps</span>}
-        {set.isAMRAP && !isActive && !isCompleted && <span className="text-sm">{set.targetReps}+ reps</span>}
+        {set.isAMRAP && isCompleted && <span className="text-base font-bold text-[var(--color-green)]">{amrapReps} reps</span>}
+        {set.isAMRAP && !isActive && !isCompleted && <span className="text-base">{set.targetReps}+ reps</span>}
       </div>
 
-      {/* AMRAP stepper + optional weight edit */}
+      {/* AMRAP stepper */}
       {set.isAMRAP && isActive && !isCompleted && (
-        <div className="mt-2 ml-8 space-y-2" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-3 ml-10 space-y-2" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-[#8e8e93]">Reps:</span>
+            <span className="text-sm text-[#8e8e93]">Reps:</span>
             <button
               onClick={() => setAmrapReps(Math.max(0, amrapReps - 1))}
-              className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
+              className="w-10 h-10 rounded-lg bg-[#38383a] text-center text-lg leading-10"
             >
               −
             </button>
-            <span className="text-lg font-bold tabular-nums w-8 text-center">{amrapReps}</span>
+            <span className="text-xl font-bold tabular-nums w-8 text-center">{amrapReps}</span>
             <button
               onClick={() => setAmrapReps(amrapReps + 1)}
-              className="w-8 h-8 rounded-lg bg-[#38383a] text-center text-lg leading-8"
+              className="w-10 h-10 rounded-lg bg-[#38383a] text-center text-lg leading-10"
             >
               +
             </button>
 
-            {/* PR hint */}
             {prTarget !== null && (
-              <span className="text-[10px] text-[#8e8e93] ml-2">
+              <span className="text-xs text-[#8e8e93] ml-2">
                 {prTarget}+ to beat PR ({Math.round(bestE1RM!)} lbs)
               </span>
             )}

@@ -7,8 +7,8 @@ import { liftFromDay } from './types'
 // Helpers
 // ============================================================
 
-function roundToNearest5(value: number): number {
-  return Math.floor(value / 5) * 5
+function roundToNearest2_5(value: number): number {
+  return Math.round(value / 2.5) * 2.5
 }
 
 export function generateId(): string {
@@ -119,10 +119,10 @@ export const useStore = create<AppState>()(
           benchOneRepMax: benchRM,
           deadliftOneRepMax: deadliftRM,
           pressOneRepMax: pressRM,
-          squatTM: roundToNearest5(squatRM * 0.9),
-          benchTM: roundToNearest5(benchRM * 0.9),
-          deadliftTM: roundToNearest5(deadliftRM * 0.9),
-          pressTM: roundToNearest5(pressRM * 0.9),
+          squatTM: roundToNearest2_5(squatRM * 0.9),
+          benchTM: roundToNearest2_5(benchRM * 0.9),
+          deadliftTM: roundToNearest2_5(deadliftRM * 0.9),
+          pressTM: roundToNearest2_5(pressRM * 0.9),
           currentWeek: 1,
           currentDay: 1,
           cycleNumber: 1,
@@ -146,10 +146,10 @@ export const useStore = create<AppState>()(
         set({
           profile: {
             ...profile,
-            squatTM: roundToNearest5(profile.squatOneRepMax * 0.9),
-            benchTM: roundToNearest5(profile.benchOneRepMax * 0.9),
-            deadliftTM: roundToNearest5(profile.deadliftOneRepMax * 0.9),
-            pressTM: roundToNearest5(profile.pressOneRepMax * 0.9),
+            squatTM: roundToNearest2_5(profile.squatOneRepMax * 0.9),
+            benchTM: roundToNearest2_5(profile.benchOneRepMax * 0.9),
+            deadliftTM: roundToNearest2_5(profile.deadliftOneRepMax * 0.9),
+            pressTM: roundToNearest2_5(profile.pressOneRepMax * 0.9),
           },
         })
       },

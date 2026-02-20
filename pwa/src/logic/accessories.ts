@@ -7,7 +7,7 @@ import type { AccessoryExercise } from '../types'
 
 /** Day 1: Squat accessories */
 const SQUAT_ACCESSORIES: AccessoryExercise[] = [
-  { id: 'rdl', name: 'Romanian Deadlift', sets: 3, reps: 8, weightType: AccessoryWeightType.Standard },
+  { id: 'rdl', name: 'Romanian Deadlift', sets: 3, reps: 8, weightType: AccessoryWeightType.Barbell },
   { id: 'calf', name: 'DB Standing Calf Raise', sets: 3, reps: 12, weightType: AccessoryWeightType.Standard },
   { id: 'wheel', name: 'Wheel Rollout', sets: 3, reps: 10, weightType: AccessoryWeightType.NoWeight },
 ]

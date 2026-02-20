@@ -136,6 +136,7 @@ export default function AccessoryEditor({ value, onChange }: AccessoryEditorProp
                           <div className="text-sm">{ex.name}</div>
                           <div className="text-xs text-[#8e8e93]">
                             {ex.sets}x{ex.reps}
+                            {ex.weightType === AccessoryWeightType.Barbell && ' (Barbell)'}
                             {ex.weightType === AccessoryWeightType.Bodyweight && ' (BW)'}
                             {ex.weightType === AccessoryWeightType.NoWeight && ' (no weight)'}
                           </div>
@@ -206,6 +207,7 @@ export default function AccessoryEditor({ value, onChange }: AccessoryEditorProp
                                   <div className="text-sm">{ex.name}</div>
                                   <div className="text-xs text-[#8e8e93]">
                                     {ex.sets}x{ex.reps}
+                                    {ex.weightType === AccessoryWeightType.Barbell && ' (Barbell)'}
                                     {ex.weightType === AccessoryWeightType.Bodyweight && ' (BW)'}
                                     {ex.weightType === AccessoryWeightType.NoWeight && ' (no weight)'}
                                   </div>
@@ -274,6 +276,7 @@ export default function AccessoryEditor({ value, onChange }: AccessoryEditorProp
                     <div className="flex gap-2">
                       {([
                         { value: AccessoryWeightType.Standard, label: 'Standard' },
+                        { value: AccessoryWeightType.Barbell, label: 'Barbell' },
                         { value: AccessoryWeightType.Bodyweight, label: 'Bodyweight' },
                         { value: AccessoryWeightType.NoWeight, label: 'No Weight' },
                       ] as const).map((opt) => (

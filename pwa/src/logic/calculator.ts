@@ -64,9 +64,9 @@ export function amrapMinimum(week: number): number {
   }
 }
 
-/** Round weight down to nearest 5 lbs */
+/** Round weight to nearest 2.5 lbs (supports 1.25 lb plates per side) */
 export function roundWeight(weight: number): number {
-  return Math.floor(weight / 5) * 5
+  return Math.round(weight / 2.5) * 2.5
 }
 
 /** Generate all 11 prescribed sets for a main lift on a given week
