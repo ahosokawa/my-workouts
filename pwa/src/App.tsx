@@ -16,7 +16,7 @@ export default function App() {
   // No profile yet -> onboarding
   if (!profile) {
     return (
-      <div className="h-dvh overflow-y-auto overscroll-none pt-safe">
+      <div className="fixed inset-0 overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="*" element={<OnboardingView />} />
         </Routes>
@@ -27,7 +27,7 @@ export default function App() {
   // Cycle complete -> cycle completion flow
   if (profile.isCycleComplete) {
     return (
-      <div className="h-dvh overflow-y-auto overscroll-none pt-safe">
+      <div className="fixed inset-0 overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="*" element={<CycleCompletionView />} />
         </Routes>
@@ -37,7 +37,7 @@ export default function App() {
 
   // Normal app with tabs
   return (
-    <div className="flex flex-col h-dvh overflow-hidden">
+    <div className="fixed inset-0 flex flex-col">
       <div className="flex-1 overflow-y-auto overscroll-none pt-safe">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
