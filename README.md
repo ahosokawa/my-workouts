@@ -2,7 +2,7 @@
 
 A 5/3/1 weightlifting program tracker built as an offline-first React PWA. All data persists locally in your browser — no account needed.
 
-**[Live App](https://andrewhosokawa.github.io/my-workouts/)**
+**[Live App](https://ahosokawa.github.io/my-workouts/)**
 
 ## Quick Start
 
