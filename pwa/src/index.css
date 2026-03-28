@@ -12,10 +12,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body, #root {
-  height: 100dvh;
+html, body {
+  height: 100%;
   margin: 0;
   padding: 0;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
 }
 
 body {
