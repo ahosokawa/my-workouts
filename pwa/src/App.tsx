@@ -38,7 +38,7 @@ export default function App() {
   // Normal app with tabs
   return (
     <div className="absolute inset-0 flex flex-col">
-      <div className="flex-1 overflow-y-auto pt-safe">
+      <div className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
           <Route path="/workout" element={<WorkoutView />} />
