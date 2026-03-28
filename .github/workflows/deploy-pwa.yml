@@ -35,8 +35,12 @@ jobs:
         run: npm ci
         working-directory: pwa
 
+      - name: Test
+        run: npm run test:run
+        working-directory: pwa
+
       - name: Build
-        run: npx vite build
+        run: npm run build
         working-directory: pwa
 
       - name: Upload artifact

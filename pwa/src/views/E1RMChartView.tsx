@@ -110,8 +110,8 @@ export default function E1RMChartView() {
               />
               <Tooltip
                 contentStyle={{ backgroundColor: '#2c2c2e', border: 'none', borderRadius: 8, fontSize: 12 }}
-                labelFormatter={(v: string) => new Date(v).toLocaleDateString()}
-                formatter={(v: number) => [`${v} lbs`, 'Est. 1RM']}
+                labelFormatter={(v) => new Date(String(v)).toLocaleDateString()}
+                formatter={(v) => [`${v} lbs`, 'Est. 1RM']}
               />
               <Line type="monotone" dataKey="e1rm" stroke="#007AFF" strokeWidth={2} dot={{ fill: '#007AFF', r: 4 }} />
             </LineChart>

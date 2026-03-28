@@ -2,12 +2,14 @@
 // Main Lift enum
 // ============================================================
 
-export enum MainLift {
-  Squat = 1,
-  BenchPress = 2,
-  Deadlift = 3,
-  ShoulderPress = 4,
-}
+export const MainLift = {
+  Squat: 1,
+  BenchPress: 2,
+  Deadlift: 3,
+  ShoulderPress: 4,
+} as const
+
+export type MainLift = (typeof MainLift)[keyof typeof MainLift]
 
 export const MAIN_LIFTS = [
   MainLift.Squat,
@@ -54,12 +56,14 @@ export function liftFromDay(day: number): MainLift | null {
 // Accessory Weight Type
 // ============================================================
 
-export enum AccessoryWeightType {
-  Standard = 'standard',
-  Bodyweight = 'bodyweight',
-  NoWeight = 'noWeight',
-  Barbell = 'barbell',
-}
+export const AccessoryWeightType = {
+  Standard: 'standard',
+  Bodyweight: 'bodyweight',
+  NoWeight: 'noWeight',
+  Barbell: 'barbell',
+} as const
+
+export type AccessoryWeightType = (typeof AccessoryWeightType)[keyof typeof AccessoryWeightType]
 
 // ============================================================
 // Data Models

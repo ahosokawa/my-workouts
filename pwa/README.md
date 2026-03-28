@@ -65,6 +65,8 @@ The dev server runs at `http://localhost:5173/my-workouts/` by default. The `/my
 | `npm run dev`   | `vite`               | Start dev server with hot module replacement |
 | `npm run build` | `tsc -b && vite build` | Type-check and build for production        |
 | `npm run preview` | `vite preview`     | Serve the production build locally           |
+| `npm test`      | `vitest`             | Run tests in watch mode                      |
+| `npm run test:run` | `vitest run`      | Run tests once (CI)                          |
 | `npm run lint`  | `eslint .`           | Run ESLint                                   |
 
 ### Testing the PWA Locally

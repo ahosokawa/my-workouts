@@ -21,6 +21,7 @@ function trainingMax(profile: UserProfile, lift: MainLift): number {
     case 2: return profile.benchTM
     case 3: return profile.deadliftTM
     case 4: return profile.pressTM
+    default: return profile.squatTM
   }
 }
 
@@ -262,7 +263,13 @@ export const useStore = create<AppState>()(
       },
 
       importData: (json: string) => {
-        const data = JSON.parse(json)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let data: any
+        try {
+          data = JSON.parse(json)
+        } catch {
+          throw new Error('Invalid backup file')
+        }
         if (data.version !== 1) throw new Error('Unsupported backup version')
         set({
           profile: data.profile,
