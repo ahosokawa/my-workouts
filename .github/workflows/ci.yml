@@ -1,26 +1,12 @@
-name: Deploy PWA to GitHub Pages
+name: CI
 
 on:
-  push:
-    branches: [main]
+  pull_request:
     paths:
       - 'pwa/**'
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +21,11 @@ jobs:
         run: npm ci
         working-directory: pwa
 
-      - name: Test
+      - name: Lint
+        run: npm run lint
+        working-directory: pwa
+
+      - name: Unit tests
         run: npm run test:run
         working-directory: pwa
 
@@ -50,12 +40,3 @@ jobs:
       - name: E2E tests
         run: npm run test:e2e
         working-directory: pwa
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: pwa/dist
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

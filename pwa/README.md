@@ -15,6 +15,8 @@ A 5/3/1-inspired weightlifting tracker built as a Progressive Web App. Designed 
 ## Project Structure
 
 ```
+e2e/                  # Playwright end-to-end tests
+test-fixtures/        # Test fixture data
 src/
 ├── components/       # Reusable UI (TabBar, PlateBreakdown, RestTimer, Icons)
 ├── views/            # Page-level components
@@ -29,6 +31,7 @@ src/
 │   └── SettingsView.tsx          # Profile, data backup, resets
 ├── logic/            # Pure business logic
 │   ├── calculator.ts             # 5/3/1 set/rep prescriptions
+│   ├── variants.ts               # Program variant configs (FSL, BBB, SSL, BBS)
 │   ├── accessories.ts            # Default accessory exercise definitions
 │   ├── brzycki.ts                # Estimated 1RM formula
 │   ├── cycleEvaluator.ts         # Cycle success evaluation
@@ -68,6 +71,21 @@ The dev server runs at `http://localhost:5173/my-workouts/` by default. The `/my
 | `npm test`      | `vitest`             | Run tests in watch mode                      |
 | `npm run test:run` | `vitest run`      | Run tests once (CI)                          |
 | `npm run lint`  | `eslint .`           | Run ESLint                                   |
+| `npm run test:e2e` | `playwright test` | Run end-to-end tests (Playwright)            |
+
+### End-to-End Tests
+
+E2E tests use [Playwright](https://playwright.dev/) and live in `e2e/`. They run against a production build served by `vite preview`.
+
+```bash
+# Install Playwright browsers (first time only)
+npx playwright install chromium
+
+# Run e2e tests
+npm run test:e2e
+```
+
+The Playwright config (`playwright.config.ts`) automatically builds and starts the preview server before running tests. Tests cover onboarding, workout flows, PRs, settings, and program variants.
 
 ### Testing the PWA Locally
 
@@ -119,6 +137,7 @@ Users can export/import a full JSON backup from the Settings screen.
 
 - **Cycles:** 3 weeks long, 4 training days per week (Squat, Bench, Deadlift, Overhead Press).
 - **Training Maxes:** Calculated as 90% of estimated 1RM, rounded to the nearest 5 lbs.
+- **Program Variants:** Four supplemental templates — FSL (5×5), BBB (5×10), SSL (5×5 heavier), BBS (10×5). Variants are categorized as Leader (volume) or Anchor (intensity) phases, with the app suggesting phase transitions at cycle completion.
 - **Progression:** After a successful cycle, TMs increase by 10 lbs (Squat/Deadlift) or 5 lbs (Bench/OHP).
 - **AMRAP:** The final working set each day is "as many reps as possible." The app tracks reps and calculates estimated 1RM via the Brzycki formula.
 - **Accessories:** Configurable per day. Users can customize exercises when starting a new cycle; the configuration persists across cycles.

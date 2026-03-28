@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { liftDisplayName, liftFromDay } from '../types'
 import { BARBELL_WEIGHT } from '../logic/plates'
+import { getVariantConfig } from '../logic/variants'
 import PlateBreakdown from '../components/PlateBreakdown'
 
 export default function WorkoutDetailView() {
@@ -47,7 +48,12 @@ export default function WorkoutDetailView() {
 
       {/* Header */}
       <div className="bg-[#1c1c1e] rounded-xl p-4">
-        <h1 className="text-lg font-bold">Week {session.week}: {lift ? liftDisplayName(lift) : 'Unknown'}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-bold">Week {session.week}: {lift ? liftDisplayName(lift) : 'Unknown'}</h1>
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[#2c2c2e] text-[#8e8e93]">
+            {getVariantConfig(session.variant ?? 'fsl').shortLabel}
+          </span>
+        </div>
         <p className="text-xs text-[#8e8e93]">
           {date.toLocaleDateString()} · Cycle {session.cycleNumber} · {mins}:{String(secs).padStart(2, '0')}
         </p>

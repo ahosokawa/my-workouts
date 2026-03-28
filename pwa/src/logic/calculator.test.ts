@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { prescribedSets, roundWeight, amrapMinimum } from './calculator'
+import { ProgramVariant } from '../types'
 
 describe('roundWeight', () => {
   it('rounds to nearest 2.5', () => {
@@ -90,5 +91,68 @@ describe('prescribedSets', () => {
     const working = sets1.filter((s) => !s.isWarmup && !s.isSupplemental)
     const supp = sets1.filter((s) => s.isSupplemental)
     expect(supp[0].percentage).toBe(working[0].percentage)
+  })
+
+  it('default (no variant arg) produces FSL layout', () => {
+    const sets = prescribedSets(tm, 1)
+    const supp = sets.filter((s) => s.isSupplemental)
+    expect(supp).toHaveLength(5)
+    expect(supp[0].targetReps).toBe(5)
+  })
+})
+
+describe('prescribedSets with BBB variant', () => {
+  const tm = 200
+
+  it('produces 5 supplemental sets of 10 reps at 50% TM', () => {
+    for (const week of [1, 2, 3]) {
+      const sets = prescribedSets(tm, week, ProgramVariant.BBB)
+      const supp = sets.filter((s) => s.isSupplemental)
+      expect(supp).toHaveLength(5)
+      expect(supp[0].targetReps).toBe(10)
+      expect(supp[0].percentage).toBe(0.50)
+      expect(supp[0].weight).toBe(roundWeight(tm * 0.50))
+    }
+  })
+
+  it('has same warmup and working sets as FSL', () => {
+    const bbb = prescribedSets(tm, 1, ProgramVariant.BBB).filter((s) => !s.isSupplemental)
+    const fsl = prescribedSets(tm, 1, ProgramVariant.FSL).filter((s) => !s.isSupplemental)
+    expect(bbb).toEqual(fsl)
+  })
+})
+
+describe('prescribedSets with SSL variant', () => {
+  const tm = 200
+
+  it('produces 5 supplemental sets of 5 reps at second working set %', () => {
+    const secondPcts = [0.75, 0.80, 0.85]
+    for (let week = 1; week <= 3; week++) {
+      const sets = prescribedSets(tm, week, ProgramVariant.SSL)
+      const supp = sets.filter((s) => s.isSupplemental)
+      expect(supp).toHaveLength(5)
+      expect(supp[0].targetReps).toBe(5)
+      expect(supp[0].percentage).toBe(secondPcts[week - 1])
+    }
+  })
+})
+
+describe('prescribedSets with BBS variant', () => {
+  const tm = 200
+
+  it('produces 10 supplemental sets of 5 reps at first working set %', () => {
+    const firstPcts = [0.65, 0.70, 0.75]
+    for (let week = 1; week <= 3; week++) {
+      const sets = prescribedSets(tm, week, ProgramVariant.BBS)
+      const supp = sets.filter((s) => s.isSupplemental)
+      expect(supp).toHaveLength(10)
+      expect(supp[0].targetReps).toBe(5)
+      expect(supp[0].percentage).toBe(firstPcts[week - 1])
+    }
+  })
+
+  it('total sets = 3 warmup + 3 working + 10 supplemental = 16', () => {
+    const sets = prescribedSets(tm, 1, ProgramVariant.BBS)
+    expect(sets).toHaveLength(16)
   })
 })

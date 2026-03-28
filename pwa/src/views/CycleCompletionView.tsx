@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType } from '../types'
 import type { AccessoryExercise } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getAccessories } from '../logic/accessories'
+import { getVariantConfig, suggestPhase } from '../logic/variants'
 import AccessoryEditor from '../components/AccessoryEditor'
 
 export default function CycleCompletionView() {
@@ -35,10 +36,19 @@ export default function CycleCompletionView() {
     return m
   })
 
+  const [selectedVariant, setSelectedVariant] = useState<ProgramVariant>(
+    () => profile.currentVariant ?? 'fsl',
+  )
+
   const [bodyWeight, setBodyWeight] = useState(() =>
     profile.bodyWeightLbs && profile.bodyWeightLbs > 0
       ? String(Math.round(profile.bodyWeightLbs))
       : '',
+  )
+
+  const suggestedPhase = suggestPhase(
+    profile.leaderCycleCount ?? 0,
+    profile.anchorCycleCount ?? 0,
   )
 
   // Per-day accessory state: initialise from last cycle's custom accessories or defaults
@@ -77,7 +87,7 @@ export default function CycleCompletionView() {
     // Save custom accessories
     setCustomAccessories(dayAccessories)
 
-    startNewCycle()
+    startNewCycle(selectedVariant)
   }
 
   return (
@@ -199,6 +209,62 @@ export default function CycleCompletionView() {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      {/* Next Cycle Program Variant */}
+      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
+        <div className="px-4 pt-3 pb-1">
+          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Next Cycle Program</h2>
+        </div>
+        <div className="px-4 pb-3">
+          <div className="text-xs text-[var(--color-accent)] mb-3">
+            {suggestedPhase === PhaseType.Anchor
+              ? `Suggested: Switch to an Anchor — you've completed ${profile.leaderCycleCount ?? 0} Leader cycle${(profile.leaderCycleCount ?? 0) !== 1 ? 's' : ''}`
+              : (profile.anchorCycleCount ?? 0) >= 1
+                ? `Suggested: Switch to a Leader — you've completed ${profile.anchorCycleCount ?? 0} Anchor cycle${(profile.anchorCycleCount ?? 0) !== 1 ? 's' : ''}`
+                : 'Suggested: Start with a Leader cycle'}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
+              const config = getVariantConfig(v)
+              const isSelected = selectedVariant === v
+              const isSuggestedPhase = config.phase === suggestedPhase
+              return (
+                <button
+                  key={v}
+                  onClick={() => setSelectedVariant(v)}
+                  className={`rounded-lg p-3 text-left transition-colors ${
+                    isSelected
+                      ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                      : isSuggestedPhase
+                        ? 'border border-[#48484a] bg-[#2c2c2e]'
+                        : 'border border-[#38383a] bg-[#1c1c1e]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-sm">{config.shortLabel}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
+                    }`}>
+                      {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#8e8e93]">
+                    {config.supplementalSets}×{config.supplementalReps}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {(() => {
+            const config = getVariantConfig(selectedVariant)
+            return (
+              <div className="mt-3 text-xs text-[#8e8e93]">
+                {config.label} — {config.description}
+              </div>
+            )
+          })()}
         </div>
       </div>
 

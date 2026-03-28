@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise } from './types'
-import { liftFromDay } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant } from './types'
+import { liftFromDay, PhaseType } from './types'
+import { getVariantConfig } from './logic/variants'
 
 // ============================================================
 // Helpers
@@ -75,7 +76,7 @@ interface AppState {
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: () => boolean  // returns true if cycle completed
-  startNewCycle: () => void
+  startNewCycle: (variant?: ProgramVariant) => void
 
   // Workout actions
   saveWorkout: (session: Omit<WorkoutSession, 'id'>, logs: Omit<SetLog, 'id' | 'sessionId'>[]) => string
@@ -128,6 +129,9 @@ export const useStore = create<AppState>()(
           currentDay: 1,
           cycleNumber: 1,
           isCycleComplete: false,
+          currentVariant: 'fsl',
+          leaderCycleCount: 0,
+          anchorCycleCount: 0,
           bodyWeightLbs: null,
           bodyWeightLastUpdated: null,
           createdAt: new Date().toISOString(),
@@ -186,9 +190,34 @@ export const useStore = create<AppState>()(
         return false
       },
 
-      startNewCycle: () => {
+      startNewCycle: (variant?: ProgramVariant) => {
         const { profile } = get()
         if (!profile) return
+
+        const currentVariant = profile.currentVariant ?? 'fsl'
+        const newVariant = variant ?? currentVariant
+        const oldPhase = getVariantConfig(currentVariant).phase
+        const newPhase = getVariantConfig(newVariant).phase
+
+        let leaderCycleCount = profile.leaderCycleCount ?? 0
+        let anchorCycleCount = profile.anchorCycleCount ?? 0
+
+        // The just-completed cycle used oldPhase; increment its counter
+        if (oldPhase === PhaseType.Leader) {
+          leaderCycleCount++
+        } else {
+          anchorCycleCount++
+        }
+
+        // If switching phase type, reset the old counter
+        if (newPhase !== oldPhase) {
+          if (newPhase === PhaseType.Leader) {
+            anchorCycleCount = 0
+          } else {
+            leaderCycleCount = 0
+          }
+        }
+
         set({
           profile: {
             ...profile,
@@ -196,6 +225,9 @@ export const useStore = create<AppState>()(
             currentDay: 1,
             cycleNumber: profile.cycleNumber + 1,
             isCycleComplete: false,
+            currentVariant: newVariant,
+            leaderCycleCount,
+            anchorCycleCount,
           },
         })
       },
@@ -302,6 +334,16 @@ export const useStore = create<AppState>()(
         // Ensure new top-level fields have defaults
         if (state.customAccessories === undefined) state.customAccessories = null
         if (!Array.isArray(state.savedExercises)) state.savedExercises = []
+        // Ensure new profile fields have defaults (variant support)
+        if (state.profile) {
+          const updates: Partial<UserProfile> = {}
+          if (!state.profile.currentVariant) updates.currentVariant = 'fsl'
+          if (state.profile.leaderCycleCount === undefined) updates.leaderCycleCount = 0
+          if (state.profile.anchorCycleCount === undefined) updates.anchorCycleCount = 0
+          if (Object.keys(updates).length > 0) {
+            state.profile = { ...state.profile, ...updates }
+          }
+        }
         return state
       },
     },

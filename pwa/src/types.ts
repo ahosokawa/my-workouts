@@ -66,6 +66,16 @@ export const AccessoryWeightType = {
 export type AccessoryWeightType = (typeof AccessoryWeightType)[keyof typeof AccessoryWeightType]
 
 // ============================================================
+// Program Variant & Phase
+// ============================================================
+
+export const ProgramVariant = { FSL: 'fsl', BBB: 'bbb', SSL: 'ssl', BBS: 'bbs' } as const
+export type ProgramVariant = (typeof ProgramVariant)[keyof typeof ProgramVariant]
+
+export const PhaseType = { Leader: 'leader', Anchor: 'anchor' } as const
+export type PhaseType = (typeof PhaseType)[keyof typeof PhaseType]
+
+// ============================================================
 // Data Models
 // ============================================================
 
@@ -82,6 +92,9 @@ export interface UserProfile {
   currentDay: number    // 1-4
   cycleNumber: number
   isCycleComplete: boolean
+  currentVariant: ProgramVariant
+  leaderCycleCount: number
+  anchorCycleCount: number
   bodyWeightLbs: number | null
   bodyWeightLastUpdated: string | null  // ISO date
   createdAt: string                     // ISO date
@@ -94,6 +107,7 @@ export interface WorkoutSession {
   week: number
   cycleNumber: number
   durationSeconds: number
+  variant?: ProgramVariant
 }
 
 export interface SetLog {

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "exportedAt": "2026-03-28T00:00:00.000Z",
+  "profile": {
+    "squatOneRepMax": 315,
+    "benchOneRepMax": 225,
+    "deadliftOneRepMax": 405,
+    "pressOneRepMax": 155,
+    "squatTM": 282.5,
+    "benchTM": 202.5,
+    "deadliftTM": 365,
+    "pressTM": 140,
+    "currentWeek": 1,
+    "currentDay": 1,
+    "cycleNumber": 2,
+    "isCycleComplete": false,
+    "currentVariant": "bbb",
+    "leaderCycleCount": 1,
+    "anchorCycleCount": 0,
+    "bodyWeightLbs": 185,
+    "bodyWeightLastUpdated": "2026-03-28T00:00:00.000Z",
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  "sessions": [],
+  "setLogs": [],
+  "wilksEntries": [],
+  "customAccessories": null,
+  "savedExercises": []
+}

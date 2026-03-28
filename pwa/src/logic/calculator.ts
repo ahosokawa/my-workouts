@@ -1,4 +1,5 @@
-import type { PrescribedSet } from '../types'
+import type { PrescribedSet, ProgramVariant } from '../types'
+import { getVariantConfig } from './variants'
 
 // ============================================================
 // Week Definitions
@@ -30,19 +31,6 @@ function workingSets(week: number): [number, number, boolean][] {
   }
 }
 
-/** Supplemental (5x5 FSL) percentage per week — matches the first working set % */
-function supplementalPercentage(week: number): number {
-  switch (week) {
-    case 1: return 0.65
-    case 2: return 0.70
-    case 3: return 0.75
-    default: return supplementalPercentage(1)
-  }
-}
-
-const SUPPLEMENTAL_SETS = 5
-const SUPPLEMENTAL_REPS = 5
-
 /** Warmup sets: [percentage, targetReps] */
 const WARMUP_SETS: [number, number][] = [
   [0.40, 5],
@@ -69,10 +57,11 @@ export function roundWeight(weight: number): number {
   return Math.round(weight / 2.5) * 2.5
 }
 
-/** Generate all 11 prescribed sets for a main lift on a given week
- *  3 warmup + 3 working (last is AMRAP) + 5 supplemental (5x5 @ first working %)
+/** Generate all prescribed sets for a main lift on a given week.
+ *  3 warmup + 3 working (last is AMRAP) + supplemental sets (varies by variant).
+ *  Default variant is FSL for backwards compatibility.
  */
-export function prescribedSets(trainingMax: number, week: number): PrescribedSet[] {
+export function prescribedSets(trainingMax: number, week: number, variant: ProgramVariant = 'fsl'): PrescribedSet[] {
   const sets: PrescribedSet[] = []
   let counter = 0
 
@@ -106,16 +95,17 @@ export function prescribedSets(trainingMax: number, week: number): PrescribedSet
     })
   }
 
-  // 5 supplemental sets (5x5 at first working set percentage)
-  const suppPct = supplementalPercentage(week)
+  // Supplemental sets (configured by variant)
+  const config = getVariantConfig(variant)
+  const suppPct = config.supplementalPercentage(week)
   const suppWeight = roundWeight(trainingMax * suppPct)
-  for (let i = 0; i < SUPPLEMENTAL_SETS; i++) {
+  for (let i = 0; i < config.supplementalSets; i++) {
     counter++
     sets.push({
       id: `set-${counter}`,
       setNumber: counter,
       percentage: suppPct,
-      targetReps: SUPPLEMENTAL_REPS,
+      targetReps: config.supplementalReps,
       isWarmup: false,
       isAMRAP: false,
       isSupplemental: true,

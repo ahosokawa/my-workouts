@@ -6,3 +6,5 @@ xcuserdata/
 DerivedData/
 build/
 /My Workouts
+test-results/
+playwright-report/

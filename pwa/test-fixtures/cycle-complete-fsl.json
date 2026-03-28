@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "exportedAt": "2026-03-28T00:00:00.000Z",
+  "profile": {
+    "squatOneRepMax": 315,
+    "benchOneRepMax": 225,
+    "deadliftOneRepMax": 405,
+    "pressOneRepMax": 155,
+    "squatTM": 282.5,
+    "benchTM": 202.5,
+    "deadliftTM": 365,
+    "pressTM": 140,
+    "currentWeek": 4,
+    "currentDay": 1,
+    "cycleNumber": 1,
+    "isCycleComplete": true,
+    "currentVariant": "fsl",
+    "leaderCycleCount": 0,
+    "anchorCycleCount": 0,
+    "bodyWeightLbs": 185,
+    "bodyWeightLastUpdated": "2026-03-28T00:00:00.000Z",
+    "createdAt": "2026-03-01T00:00:00.000Z"
+  },
+  "sessions": [
+    { "id": "s01", "date": "2026-03-03T10:00:00.000Z", "liftRawValue": 1, "week": 1, "cycleNumber": 1, "durationSeconds": 3600 },
+    { "id": "s02", "date": "2026-03-04T10:00:00.000Z", "liftRawValue": 2, "week": 1, "cycleNumber": 1, "durationSeconds": 3300 },
+    { "id": "s03", "date": "2026-03-05T10:00:00.000Z", "liftRawValue": 3, "week": 1, "cycleNumber": 1, "durationSeconds": 3500 },
+    { "id": "s04", "date": "2026-03-06T10:00:00.000Z", "liftRawValue": 4, "week": 1, "cycleNumber": 1, "durationSeconds": 3000 },
+    { "id": "s05", "date": "2026-03-10T10:00:00.000Z", "liftRawValue": 1, "week": 2, "cycleNumber": 1, "durationSeconds": 3700 },
+    { "id": "s06", "date": "2026-03-11T10:00:00.000Z", "liftRawValue": 2, "week": 2, "cycleNumber": 1, "durationSeconds": 3400 },
+    { "id": "s07", "date": "2026-03-12T10:00:00.000Z", "liftRawValue": 3, "week": 2, "cycleNumber": 1, "durationSeconds": 3600 },
+    { "id": "s08", "date": "2026-03-13T10:00:00.000Z", "liftRawValue": 4, "week": 2, "cycleNumber": 1, "durationSeconds": 3100 },
+    { "id": "s09", "date": "2026-03-17T10:00:00.000Z", "liftRawValue": 1, "week": 3, "cycleNumber": 1, "durationSeconds": 3800 },
+    { "id": "s10", "date": "2026-03-18T10:00:00.000Z", "liftRawValue": 2, "week": 3, "cycleNumber": 1, "durationSeconds": 3500 },
+    { "id": "s11", "date": "2026-03-19T10:00:00.000Z", "liftRawValue": 3, "week": 3, "cycleNumber": 1, "durationSeconds": 3700 },
+    { "id": "s12", "date": "2026-03-20T10:00:00.000Z", "liftRawValue": 4, "week": 3, "cycleNumber": 1, "durationSeconds": 3200 }
+  ],
+  "setLogs": [
+    { "id": "l001", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 0, "weight": 115, "targetReps": 5, "actualReps": null, "isAMRAP": false, "isCompleted": true, "completedAt": "2026-03-03T10:05:00.000Z" },
+    { "id": "l002", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 1, "weight": 142.5, "targetReps": 5, "actualReps": null, "isAMRAP": false, "isCompleted": true, "completedAt": "2026-03-03T10:08:00.000Z" },
+    { "id": "l003", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 2, "weight": 170, "targetReps": 3, "actualReps": null, "isAMRAP": false, "isCompleted": true, "completedAt": "2026-03-03T10:11:00.000Z" },
+    { "id": "l004", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 3, "weight": 182.5, "targetReps": 5, "actualReps": null, "isAMRAP": false, "isCompleted": true, "completedAt": "2026-03-03T10:15:00.000Z" },
+    { "id": "l005", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 4, "weight": 212.5, "targetReps": 5, "actualReps": null, "isAMRAP": false, "isCompleted": true, "completedAt": "2026-03-03T10:19:00.000Z" },
+    { "id": "l006", "sessionId": "s01", "exerciseName": "Squat", "isMainLift": true, "setIndex": 5, "weight": 240, "targetReps": 5, "actualReps": 8, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-03T10:23:00.000Z" },
+
+    { "id": "l007", "sessionId": "s02", "exerciseName": "Bench Press", "isMainLift": true, "setIndex": 5, "weight": 172.5, "targetReps": 5, "actualReps": 7, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-04T10:23:00.000Z" },
+
+    { "id": "l008", "sessionId": "s03", "exerciseName": "Deadlift", "isMainLift": true, "setIndex": 5, "weight": 310, "targetReps": 5, "actualReps": 6, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-05T10:23:00.000Z" },
+
+    { "id": "l009", "sessionId": "s04", "exerciseName": "Overhead Press", "isMainLift": true, "setIndex": 5, "weight": 120, "targetReps": 5, "actualReps": 9, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-06T10:23:00.000Z" },
+
+    { "id": "l010", "sessionId": "s05", "exerciseName": "Squat", "isMainLift": true, "setIndex": 5, "weight": 255, "targetReps": 3, "actualReps": 5, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-10T10:23:00.000Z" },
+
+    { "id": "l011", "sessionId": "s06", "exerciseName": "Bench Press", "isMainLift": true, "setIndex": 5, "weight": 182.5, "targetReps": 3, "actualReps": 5, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-11T10:23:00.000Z" },
+
+    { "id": "l012", "sessionId": "s07", "exerciseName": "Deadlift", "isMainLift": true, "setIndex": 5, "weight": 327.5, "targetReps": 3, "actualReps": 4, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-12T10:23:00.000Z" },
+
+    { "id": "l013", "sessionId": "s08", "exerciseName": "Overhead Press", "isMainLift": true, "setIndex": 5, "weight": 126, "targetReps": 3, "actualReps": 6, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-13T10:23:00.000Z" },
+
+    { "id": "l014", "sessionId": "s09", "exerciseName": "Squat", "isMainLift": true, "setIndex": 5, "weight": 267.5, "targetReps": 1, "actualReps": 3, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-17T10:23:00.000Z" },
+
+    { "id": "l015", "sessionId": "s10", "exerciseName": "Bench Press", "isMainLift": true, "setIndex": 5, "weight": 192.5, "targetReps": 1, "actualReps": 3, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-18T10:23:00.000Z" },
+
+    { "id": "l016", "sessionId": "s11", "exerciseName": "Deadlift", "isMainLift": true, "setIndex": 5, "weight": 347.5, "targetReps": 1, "actualReps": 2, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-19T10:23:00.000Z" },
+
+    { "id": "l017", "sessionId": "s12", "exerciseName": "Overhead Press", "isMainLift": true, "setIndex": 5, "weight": 133, "targetReps": 1, "actualReps": 4, "isAMRAP": true, "isCompleted": true, "completedAt": "2026-03-20T10:23:00.000Z" }
+  ],
+  "wilksEntries": [],
+  "customAccessories": null,
+  "savedExercises": []
+}

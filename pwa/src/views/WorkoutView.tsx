@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { liftDisplayName, liftFromDay, AccessoryWeightType } from '../types'
 import type { AccessoryExercise } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
+import { getVariantConfig } from '../logic/variants'
 import { getAccessories } from '../logic/accessories'
 import { estimated1RM } from '../logic/brzycki'
 import { calculateWilks } from '../logic/wilks'
@@ -33,7 +34,9 @@ export default function WorkoutView() {
   if (!lift) return null
 
   const tm = useStore.getState().getTrainingMax(lift)
-  const sets = prescribedSets(tm, profile.currentWeek)
+  const currentVariant = profile.currentVariant ?? 'fsl'
+  const variantConfig = getVariantConfig(currentVariant)
+  const sets = prescribedSets(tm, profile.currentWeek, currentVariant)
   const accessories = customAccessories?.[lift] ?? getAccessories(lift)
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
@@ -301,7 +304,7 @@ export default function WorkoutView() {
     }
 
     saveWorkout(
-      { date: new Date().toISOString(), liftRawValue: lift, week: profile.currentWeek, cycleNumber: profile.cycleNumber, durationSeconds: duration },
+      { date: new Date().toISOString(), liftRawValue: lift, week: profile.currentWeek, cycleNumber: profile.cycleNumber, durationSeconds: duration, variant: currentVariant },
       logEntries,
     )
 
@@ -363,7 +366,7 @@ export default function WorkoutView() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold">Week {profile.currentWeek}: {liftDisplayName(lift)}</h1>
-            <p className="text-sm text-[#8e8e93]">Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4</p>
+            <p className="text-sm text-[#8e8e93]">Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4 · {variantConfig.shortLabel}</p>
           </div>
           {aw.isActive && (
             <div className="text-right">
@@ -415,7 +418,7 @@ export default function WorkoutView() {
 
       {/* 5x5 Supplemental Sets */}
       <CollapsibleSection
-        title={`5x5 FSL – ${liftDisplayName(lift)}`}
+        title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${liftDisplayName(lift)}`}
         isCollapsed={collapsedSections.has('supplemental')}
         onToggle={() => toggleSection('supplemental')}
         badge={completionBadge(supplementalComplete, supplementalIndices.length)}
