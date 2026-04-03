@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mergePersistedState } from '../store'
 import type { UserProfile, AccessoryExercise } from '../types'
-import { MainLift, MAIN_LIFTS } from '../types'
+import { MainLift, MAIN_LIFTS, AccessoryWeightType } from '../types'
 import { getAccessories } from './accessories'
 
 // Minimal valid profile for simulating existing users
@@ -97,7 +97,7 @@ describe('mergePersistedState — accessory migration', () => {
 
   it('does NOT overwrite existing custom accessories', () => {
     const custom: Record<number, AccessoryExercise[]> = {
-      [MainLift.Squat]: [{ id: 'custom1', name: 'Leg Press', sets: 4, reps: 10, weightType: 1 }],
+      [MainLift.Squat]: [{ id: 'custom1', name: 'Leg Press', sets: 4, reps: 10, weightType: AccessoryWeightType.Standard }],
       [MainLift.BenchPress]: [],
       [MainLift.Deadlift]: [],
       [MainLift.ShoulderPress]: [],
@@ -133,7 +133,7 @@ describe('mergePersistedState — accessory migration', () => {
     }
     const after1 = mergePersistedState(persisted1, currentState())
     expect(after1.customAccessories).not.toBeNull()
-    expect((after1 as Record<string, unknown>)._migratedAccessories).toBe(true)
+    expect((after1 as unknown as Record<string, unknown>)._migratedAccessories).toBe(true)
 
     // User then clears all accessories (sets them to empty arrays)
     const cleared: Record<number, AccessoryExercise[]> = {
