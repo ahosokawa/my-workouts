@@ -47,7 +47,11 @@ test.describe('Onboarding flow', () => {
 
     await page.getByRole('button', { name: 'Continue' }).click()
 
-    // Step 2: accessories review
+    // Step 2: variant selection
+    await expect(page.getByText('Choose Your Program')).toBeVisible()
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    // Step 3: accessories review
     await expect(page.getByText('Review Accessories')).toBeVisible()
     await page.getByRole('button', { name: 'Start Training' }).click()
 
