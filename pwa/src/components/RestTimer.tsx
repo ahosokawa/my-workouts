@@ -1,21 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { TimerIcon } from './Icons'
+import { useStore } from '../store'
+import { useElapsedTimer } from '../hooks/useElapsedTimer'
+import { scheduleRestNotification, cancelRestNotification } from '../notifications'
 
 interface RestTimerProps {
   lastSetTime: number  // timestamp ms
-  onDismiss: () => void
 }
 
-export default function RestTimer({ lastSetTime, onDismiss }: RestTimerProps) {
-  const [elapsed, setElapsed] = useState(0)
+export default function RestTimer({ lastSetTime }: RestTimerProps) {
+  const elapsed = useElapsedTimer(true, lastSetTime)
+  const notifyEnabled = useStore((s) => s.restNotifyEnabled)
+  const notifyMinutes = useStore((s) => s.restNotifyMinutes)
 
   useEffect(() => {
-    setElapsed(Math.floor((Date.now() - lastSetTime) / 1000))
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - lastSetTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [lastSetTime])
+    if (notifyEnabled) {
+      scheduleRestNotification(lastSetTime, notifyMinutes)
+    }
+    return () => cancelRestNotification()
+  }, [lastSetTime, notifyEnabled, notifyMinutes])
 
   const minutes = Math.floor(elapsed / 60)
   const seconds = elapsed % 60
@@ -27,13 +30,6 @@ export default function RestTimer({ lastSetTime, onDismiss }: RestTimerProps) {
         <span className="font-semibold tabular-nums text-base">
           Rest: {minutes}:{String(seconds).padStart(2, '0')}
         </span>
-        <div className="flex-1" />
-        <button
-          onClick={(e) => { e.stopPropagation(); onDismiss() }}
-          className="text-[#8e8e93] text-lg leading-none px-2 py-1"
-        >
-          ✕
-        </button>
       </div>
     </div>
   )

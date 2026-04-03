@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName } from '../types'
 import { roundWeight } from '../logic/calculator'
+import { requestNotificationPermission } from '../notifications'
 
 export default function SettingsView() {
   const profile = useStore((s) => s.profile)
@@ -10,6 +11,10 @@ export default function SettingsView() {
   const resetAll = useStore((s) => s.resetAll)
   const exportData = useStore((s) => s.exportData)
   const importData = useStore((s) => s.importData)
+  const restNotifyEnabled = useStore((s) => s.restNotifyEnabled)
+  const restNotifyMinutes = useStore((s) => s.restNotifyMinutes)
+  const setRestNotifyEnabled = useStore((s) => s.setRestNotifyEnabled)
+  const setRestNotifyMinutes = useStore((s) => s.setRestNotifyMinutes)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
@@ -132,6 +137,46 @@ export default function SettingsView() {
             Save
           </button>
         </div>
+      </Section>
+
+      {/* Rest Timer Notification */}
+      <Section title="Rest Timer Notification">
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Notify when resting too long</span>
+          <button
+            onClick={async () => {
+              if (!restNotifyEnabled) {
+                const granted = await requestNotificationPermission()
+                if (granted) setRestNotifyEnabled(true)
+              } else {
+                setRestNotifyEnabled(false)
+              }
+            }}
+            className={`relative w-12 h-7 rounded-full transition-colors ${restNotifyEnabled ? 'bg-[var(--color-green)]' : 'bg-[#38383a]'}`}
+          >
+            <span className={`absolute top-[2px] left-[2px] w-6 h-6 rounded-full bg-white transition-transform ${restNotifyEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
+        {restNotifyEnabled && (
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm">Notify after</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setRestNotifyMinutes(Math.max(1, restNotifyMinutes - 1))}
+                className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+              >
+                −
+              </button>
+              <span className="text-sm tabular-nums w-16 text-center">{restNotifyMinutes} min</span>
+              <button
+                onClick={() => setRestNotifyMinutes(Math.min(10, restNotifyMinutes + 1))}
+                className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Training Maxes */}

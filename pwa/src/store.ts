@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant } from './types'
-import { liftFromDay, PhaseType } from './types'
+import { liftFromDay, MAIN_LIFTS, PhaseType } from './types'
 import { getVariantConfig } from './logic/variants'
+import { getAccessories } from './logic/accessories'
 
 // ============================================================
 // Helpers
@@ -70,9 +71,11 @@ interface AppState {
   activeWorkout: ActiveWorkout
   customAccessories: Record<number, AccessoryExercise[]> | null  // keyed by MainLift value
   savedExercises: AccessoryExercise[]  // user's exercise library for re-use
+  restNotifyEnabled: boolean
+  restNotifyMinutes: number
 
   // Profile actions
-  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number) => void
+  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant) => void
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: () => boolean  // returns true if cycle completed
@@ -90,6 +93,10 @@ interface AppState {
   setCustomAccessories: (accessories: Record<number, AccessoryExercise[]>) => void
   addSavedExercise: (exercise: AccessoryExercise) => void
 
+  // Notification actions
+  setRestNotifyEnabled: (enabled: boolean) => void
+  setRestNotifyMinutes: (minutes: number) => void
+
   // Data management
   resetAll: () => void
   exportData: () => string
@@ -98,6 +105,43 @@ interface AppState {
   // Helpers
   getTrainingMax: (lift: MainLift) => number
   getCurrentLift: () => MainLift | null
+}
+
+// ============================================================
+// Merge (exported for testing)
+// ============================================================
+
+export function mergePersistedState(persisted: unknown, current: AppState): AppState {
+  const state = { ...current, ...(persisted as Partial<AppState>) }
+  // Ensure activeWorkout always has every expected field (handles old persisted shapes)
+  state.activeWorkout = { ...EMPTY_ACTIVE_WORKOUT, ...state.activeWorkout }
+  // Ensure new top-level fields have defaults
+  // One-time migration: populate default accessories for existing users who never customized
+  if (state.profile && !(state as Record<string, unknown>)._migratedAccessories && (state.customAccessories === undefined || state.customAccessories === null)) {
+    const m: Record<number, AccessoryExercise[]> = {}
+    for (const lift of MAIN_LIFTS) {
+      m[lift] = getAccessories(lift).map((ex) => ({ ...ex }))
+    }
+    state.customAccessories = m
+  }
+  if (state.profile && state.customAccessories !== undefined && state.customAccessories !== null) {
+    (state as Record<string, unknown>)._migratedAccessories = true
+  }
+  if (state.customAccessories === undefined) state.customAccessories = null
+  if (!Array.isArray(state.savedExercises)) state.savedExercises = []
+  if (state.restNotifyEnabled === undefined) state.restNotifyEnabled = true
+  if (state.restNotifyMinutes === undefined) state.restNotifyMinutes = 3
+  // Ensure new profile fields have defaults (variant support)
+  if (state.profile) {
+    const updates: Partial<UserProfile> = {}
+    if (!state.profile.currentVariant) updates.currentVariant = 'fsl'
+    if (state.profile.leaderCycleCount === undefined) updates.leaderCycleCount = 0
+    if (state.profile.anchorCycleCount === undefined) updates.anchorCycleCount = 0
+    if (Object.keys(updates).length > 0) {
+      state.profile = { ...state.profile, ...updates }
+    }
+  }
+  return state
 }
 
 // ============================================================
@@ -114,8 +158,10 @@ export const useStore = create<AppState>()(
       activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
       customAccessories: null,
       savedExercises: [],
+      restNotifyEnabled: true,
+      restNotifyMinutes: 3,
 
-      createProfile: (squatRM, benchRM, deadliftRM, pressRM) => {
+      createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant) => {
         const profile: UserProfile = {
           squatOneRepMax: squatRM,
           benchOneRepMax: benchRM,
@@ -129,7 +175,7 @@ export const useStore = create<AppState>()(
           currentDay: 1,
           cycleNumber: 1,
           isCycleComplete: false,
-          currentVariant: 'fsl',
+          currentVariant: variant ?? 'fsl',
           leaderCycleCount: 0,
           anchorCycleCount: 0,
           bodyWeightLbs: null,
@@ -270,6 +316,9 @@ export const useStore = create<AppState>()(
         set({ customAccessories: accessories })
       },
 
+      setRestNotifyEnabled: (enabled) => set({ restNotifyEnabled: enabled }),
+      setRestNotifyMinutes: (minutes) => set({ restNotifyMinutes: Math.max(1, Math.min(10, minutes)) }),
+
       addSavedExercise: (exercise) => {
         set((state) => {
           // Avoid duplicates by name (case-insensitive)
@@ -327,25 +376,7 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'my-workouts-storage',
-      merge: (persisted, current) => {
-        const state = { ...current, ...(persisted as Partial<AppState>) }
-        // Ensure activeWorkout always has every expected field (handles old persisted shapes)
-        state.activeWorkout = { ...EMPTY_ACTIVE_WORKOUT, ...state.activeWorkout }
-        // Ensure new top-level fields have defaults
-        if (state.customAccessories === undefined) state.customAccessories = null
-        if (!Array.isArray(state.savedExercises)) state.savedExercises = []
-        // Ensure new profile fields have defaults (variant support)
-        if (state.profile) {
-          const updates: Partial<UserProfile> = {}
-          if (!state.profile.currentVariant) updates.currentVariant = 'fsl'
-          if (state.profile.leaderCycleCount === undefined) updates.leaderCycleCount = 0
-          if (state.profile.anchorCycleCount === undefined) updates.anchorCycleCount = 0
-          if (Object.keys(updates).length > 0) {
-            state.profile = { ...state.profile, ...updates }
-          }
-        }
-        return state
-      },
+      merge: mergePersistedState,
     },
   ),
 )

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { MAIN_LIFTS } from '../types'
+import { MAIN_LIFTS, ProgramVariant, PhaseType } from '../types'
 import type { AccessoryExercise } from '../types'
 import { roundWeight } from '../logic/calculator'
-import { getAccessories } from '../logic/accessories'
+import { getVariantConfig } from '../logic/variants'
 import AccessoryEditor from '../components/AccessoryEditor'
 
 export default function OnboardingView() {
@@ -11,7 +11,7 @@ export default function OnboardingView() {
   const updateProfile = useStore((s) => s.updateProfile)
   const setCustomAccessories = useStore((s) => s.setCustomAccessories)
 
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
 
   // Step 1 state
   const [squat, setSquat] = useState('')
@@ -20,11 +20,14 @@ export default function OnboardingView() {
   const [press, setPress] = useState('')
   const [bodyWeight, setBodyWeight] = useState('')
 
-  // Step 2 state — initialise with defaults
+  // Step 2 state — variant selection
+  const [selectedVariant, setSelectedVariant] = useState<ProgramVariant>(ProgramVariant.BBB)
+
+  // Step 3 state — accessories (empty by default)
   const [dayAccessories, setDayAccessories] = useState<Record<number, AccessoryExercise[]>>(() => {
     const m: Record<number, AccessoryExercise[]> = {}
     for (const lift of MAIN_LIFTS) {
-      m[lift] = getAccessories(lift).map((ex) => ({ ...ex }))
+      m[lift] = []
     }
     return m
   })
@@ -34,14 +37,11 @@ export default function OnboardingView() {
 
   function handleContinue() {
     if (!allValid) return
-    // Don't create profile yet — wait until step 2 is complete,
-    // because App.tsx switches away from OnboardingView when profile exists.
     setStep(2)
   }
 
   function handleStart() {
-    // Now create the profile and save accessories in one go
-    createProfile(values[0], values[1], values[2], values[3])
+    createProfile(values[0], values[1], values[2], values[3], selectedVariant)
     const bw = Number(bodyWeight)
     if (bw > 0) {
       updateProfile({ bodyWeightLbs: bw, bodyWeightLastUpdated: new Date().toISOString() })
@@ -56,18 +56,93 @@ export default function OnboardingView() {
     { label: 'Overhead Press', value: press, set: setPress },
   ]
 
-  // ---- Step 2: Accessory Review ----
-  if (step === 2) {
+  // ---- Step 3: Accessory Review ----
+  if (step === 3) {
     return (
       <div className="min-h-full flex flex-col p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold mb-2">Review Accessories</h1>
           <p className="text-sm text-[#8e8e93]">
-            Customize the accessory exercises for each training day. You can change these again after each cycle.
+            Add accessory exercises for each training day. You can change these again after each cycle.
           </p>
         </div>
 
         <AccessoryEditor value={dayAccessories} onChange={setDayAccessories} />
+
+        <div className="flex-1 min-h-6" />
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={() => setStep(2)}
+            className="flex-1 py-3 rounded-xl font-semibold text-white bg-[#38383a]"
+          >
+            Back
+          </button>
+          <button
+            onClick={handleStart}
+            className="flex-1 py-3 rounded-xl font-semibold text-white bg-[var(--color-accent)]"
+          >
+            Start Training
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Step 2: Program Variant Selection ----
+  if (step === 2) {
+    return (
+      <div className="min-h-full flex flex-col p-6">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold mb-2">Choose Your Program</h1>
+          <p className="text-sm text-[#8e8e93]">
+            Pick a supplemental template for your first cycle. You can change this after each cycle.
+          </p>
+        </div>
+
+        <div className="text-xs text-[var(--color-accent)] mb-3">
+          Suggested: Start with a Leader cycle
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
+            const config = getVariantConfig(v)
+            const isSelected = selectedVariant === v
+            const isSuggestedPhase = config.phase === PhaseType.Leader
+            return (
+              <button
+                key={v}
+                onClick={() => setSelectedVariant(v)}
+                className={`rounded-lg p-3 text-left transition-colors ${
+                  isSelected
+                    ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                    : isSuggestedPhase
+                      ? 'border border-[#48484a] bg-[#2c2c2e]'
+                      : 'border border-[#38383a] bg-[#1c1c1e]'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-semibold text-sm">{config.shortLabel}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                    config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
+                  }`}>
+                    {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
+                  </span>
+                </div>
+                <div className="text-xs text-[#8e8e93]">
+                  {config.supplementalSets}×{config.supplementalReps}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        {(() => {
+          const config = getVariantConfig(selectedVariant)
+          return (
+            <div className="mt-3 text-xs text-[#8e8e93]">
+              {config.label} — {config.description}
+            </div>
+          )
+        })()}
 
         <div className="flex-1 min-h-6" />
 
@@ -79,10 +154,10 @@ export default function OnboardingView() {
             Back
           </button>
           <button
-            onClick={handleStart}
+            onClick={() => setStep(3)}
             className="flex-1 py-3 rounded-xl font-semibold text-white bg-[var(--color-accent)]"
           >
-            Start Training
+            Continue
           </button>
         </div>
       </div>

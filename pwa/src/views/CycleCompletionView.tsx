@@ -3,7 +3,6 @@ import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType } from '../types'
 import type { AccessoryExercise } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
-import { getAccessories } from '../logic/accessories'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
 import AccessoryEditor from '../components/AccessoryEditor'
 
@@ -57,7 +56,7 @@ export default function CycleCompletionView() {
     for (const lift of MAIN_LIFTS) {
       m[lift] = customAccessories?.[lift]
         ? customAccessories[lift].map((ex) => ({ ...ex }))
-        : getAccessories(lift).map((ex) => ({ ...ex, id: ex.id }))
+        : []
     }
     return m
   })

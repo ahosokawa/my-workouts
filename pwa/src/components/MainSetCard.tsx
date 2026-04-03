@@ -72,7 +72,7 @@ export default function MainSetCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`text-xs font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : set.isSupplemental ? 'text-[var(--color-yellow)]' : 'text-[var(--color-accent)]'}`}>
-              {set.isWarmup ? 'Warmup' : set.isSupplemental ? '5x5' : 'Working'}
+              {set.isWarmup ? 'Warmup' : set.isSupplemental ? 'Supplemental' : 'Working'}
             </span>
             <span className="text-xs text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
           </div>

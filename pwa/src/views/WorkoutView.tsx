@@ -4,12 +4,12 @@ import { liftDisplayName, liftFromDay, AccessoryWeightType } from '../types'
 import type { AccessoryExercise } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { getAccessories } from '../logic/accessories'
 import { estimated1RM } from '../logic/brzycki'
 import { calculateWilks } from '../logic/wilks'
 import { BARBELL_WEIGHT } from '../logic/plates'
 import PlateBreakdown from '../components/PlateBreakdown'
 import RestTimer from '../components/RestTimer'
+import { requestNotificationPermission } from '../notifications'
 import MainSetCard from '../components/MainSetCard'
 import CollapsibleSection from '../components/CollapsibleSection'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
@@ -37,7 +37,7 @@ export default function WorkoutView() {
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
   const sets = prescribedSets(tm, profile.currentWeek, currentVariant)
-  const accessories = customAccessories?.[lift] ?? getAccessories(lift)
+  const accessories = customAccessories?.[lift] ?? []
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
   const completedMain = useMemo(() => new Set(aw.completedMain), [aw.completedMain])
@@ -157,7 +157,10 @@ export default function WorkoutView() {
 
   // ---- Actions ----
 
+  const restNotifyEnabled = useStore((s) => s.restNotifyEnabled)
+
   function startSession() {
+    if (restNotifyEnabled) requestNotificationPermission()
     const w: Record<string, string> = {}
     const r: Record<string, string> = {}
     for (const ex of accessories) {
@@ -387,7 +390,7 @@ export default function WorkoutView() {
 
       {/* Rest Timer - sticky inline bar */}
       {aw.showRestTimer && aw.lastSetTime && (
-        <RestTimer lastSetTime={aw.lastSetTime} onDismiss={() => updateAW({ showRestTimer: false })} />
+        <RestTimer lastSetTime={aw.lastSetTime} />
       )}
 
       {/* Warmups + 5/3/1 Working Sets */}
