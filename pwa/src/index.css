@@ -37,6 +37,7 @@ body {
 }
 
 #root {
+  height: 100%;
 }
 
 /* iOS 26 Safari PWA bottom-edge fix */
