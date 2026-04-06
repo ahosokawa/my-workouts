@@ -17,7 +17,7 @@ export default function App() {
   // No profile yet -> onboarding
   if (!profile) {
     return (
-      <div className="min-h-full pt-safe">
+      <div className="absolute inset-0 overflow-y-auto pt-safe" style={{ WebkitOverflowScrolling: 'touch' }}>
         <Routes>
           <Route path="*" element={<OnboardingView />} />
         </Routes>
