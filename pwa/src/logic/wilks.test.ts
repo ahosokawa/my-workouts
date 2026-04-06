@@ -28,6 +28,26 @@ describe('calculateWilks', () => {
     const higher = calculateWilks(180, 400, 300, 500)!
     expect(higher).toBeGreaterThan(lower)
   })
+
+  it('uses male coefficients by default', () => {
+    const defaultScore = calculateWilks(180, 300, 250, 400)!
+    const maleScore = calculateWilks(180, 300, 250, 400, 'male')!
+    expect(defaultScore).toBe(maleScore)
+  })
+
+  it('returns a reasonable score for female lifter', () => {
+    // 130 lb female, 200 squat, 120 bench, 250 deadlift
+    const score = calculateWilks(130, 200, 120, 250, 'female')
+    expect(score).not.toBeNull()
+    expect(score!).toBeGreaterThan(100)
+    expect(score!).toBeLessThan(600)
+  })
+
+  it('female score differs from male score for same inputs', () => {
+    const male = calculateWilks(150, 200, 150, 250, 'male')!
+    const female = calculateWilks(150, 200, 150, 250, 'female')!
+    expect(male).not.toBe(female)
+  })
 })
 
 describe('formatWilks', () => {

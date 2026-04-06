@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { requestNotificationPermission } from '../notifications'
 
@@ -28,24 +28,25 @@ export default function SettingsView() {
 
   useEffect(() => {
     if (profile?.bodyWeightLbs) {
-      setManualWeight(String(Math.round(profile.bodyWeightLbs)))
+      setManualWeight(String(displayRound(profile.bodyWeightLbs, profile.units ?? 'lbs')))
     }
-  }, [profile?.bodyWeightLbs])
+  }, [profile?.bodyWeightLbs, profile?.units])
 
   if (!profile) return null
 
+  const units = profile.units ?? 'lbs'
   const tmMap: Record<number, number> = {
-    [MainLift.Squat]: profile.squatTM,
-    [MainLift.BenchPress]: profile.benchTM,
-    [MainLift.Deadlift]: profile.deadliftTM,
-    [MainLift.ShoulderPress]: profile.pressTM,
+    [MainLift.Squat]: displayRound(profile.squatTM, units),
+    [MainLift.BenchPress]: displayRound(profile.benchTM, units),
+    [MainLift.Deadlift]: displayRound(profile.deadliftTM, units),
+    [MainLift.ShoulderPress]: displayRound(profile.pressTM, units),
   }
 
   const rmMap: Record<number, number> = {
-    [MainLift.Squat]: profile.squatOneRepMax,
-    [MainLift.BenchPress]: profile.benchOneRepMax,
-    [MainLift.Deadlift]: profile.deadliftOneRepMax,
-    [MainLift.ShoulderPress]: profile.pressOneRepMax,
+    [MainLift.Squat]: displayRound(profile.squatOneRepMax, units),
+    [MainLift.BenchPress]: displayRound(profile.benchOneRepMax, units),
+    [MainLift.Deadlift]: displayRound(profile.deadliftOneRepMax, units),
+    [MainLift.ShoulderPress]: displayRound(profile.pressOneRepMax, units),
   }
 
   const editKeys: Record<number, keyof typeof editRMs> = {
@@ -57,10 +58,10 @@ export default function SettingsView() {
 
   function startEditing() {
     setEditRMs({
-      squat: String(Math.round(profile!.squatOneRepMax)),
-      bench: String(Math.round(profile!.benchOneRepMax)),
-      deadlift: String(Math.round(profile!.deadliftOneRepMax)),
-      press: String(Math.round(profile!.pressOneRepMax)),
+      squat: String(displayRound(profile!.squatOneRepMax, units)),
+      bench: String(displayRound(profile!.benchOneRepMax, units)),
+      deadlift: String(displayRound(profile!.deadliftOneRepMax, units)),
+      press: String(displayRound(profile!.pressOneRepMax, units)),
     })
     setIsEditing(true)
   }
@@ -71,10 +72,10 @@ export default function SettingsView() {
     const d = Number(editRMs.deadlift)
     const p = Number(editRMs.press)
     const updates: Partial<typeof profile> = {}
-    if (s > 0) updates.squatOneRepMax = s
-    if (b > 0) updates.benchOneRepMax = b
-    if (d > 0) updates.deadliftOneRepMax = d
-    if (p > 0) updates.pressOneRepMax = p
+    if (s > 0) updates.squatOneRepMax = toStorageLbs(s, units)
+    if (b > 0) updates.benchOneRepMax = toStorageLbs(b, units)
+    if (d > 0) updates.deadliftOneRepMax = toStorageLbs(d, units)
+    if (p > 0) updates.pressOneRepMax = toStorageLbs(p, units)
     updateProfile(updates)
     recalculateTMs()
     setIsEditing(false)
@@ -83,7 +84,7 @@ export default function SettingsView() {
   function handleSaveWeight() {
     const w = Number(manualWeight)
     if (w > 0) {
-      updateProfile({ bodyWeightLbs: w, bodyWeightLastUpdated: new Date().toISOString() })
+      updateProfile({ bodyWeightLbs: toStorageLbs(w, units), bodyWeightLastUpdated: new Date().toISOString() })
     }
   }
 
@@ -106,6 +107,28 @@ export default function SettingsView() {
     <div className="p-4 pb-4 space-y-6">
       <h1 className="text-xl font-bold">Settings</h1>
 
+      {/* Units */}
+      <Section title="Units">
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Weight Units</span>
+          <div className="flex gap-1">
+            {(['lbs', 'kg'] as const).map((u) => (
+              <button
+                key={u}
+                onClick={() => { if (u !== units) updateProfile({ units: u }) }}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  units === u
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#38383a] text-[#8e8e93]'
+                }`}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Section>
+
       {/* Current Cycle */}
       <Section title="Current Cycle">
         <Row label="Cycle" value={String(profile.cycleNumber)} />
@@ -113,10 +136,10 @@ export default function SettingsView() {
         <Row label="Day" value={`${profile.currentDay} – ${liftDay(profile.currentDay)}`} />
       </Section>
 
-      {/* Body Weight */}
+      {/* Body Weight & Sex */}
       <Section title="Body Weight">
         {profile.bodyWeightLbs != null && profile.bodyWeightLbs > 0 && (
-          <Row label="Current Weight" value={`${profile.bodyWeightLbs.toFixed(1)} lbs`} />
+          <Row label="Current Weight" value={`${toDisplayWeight(profile.bodyWeightLbs, units).toFixed(1)} ${units}`} />
         )}
         <div className="flex items-center gap-2 py-2">
           <span className="text-sm text-[#8e8e93] shrink-0">Manual Entry</span>
@@ -124,7 +147,7 @@ export default function SettingsView() {
           <input
             type="number"
             inputMode="decimal"
-            placeholder="lbs"
+            placeholder={units}
             value={manualWeight}
             onChange={(e) => setManualWeight(e.target.value)}
             className="w-20 text-right text-sm"
@@ -136,6 +159,24 @@ export default function SettingsView() {
           >
             Save
           </button>
+        </div>
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Sex (Wilks)</span>
+          <div className="flex gap-1">
+            {(['male', 'female'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => { if (s !== (profile.sex ?? 'male')) updateProfile({ sex: s }) }}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  (profile.sex ?? 'male') === s
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#38383a] text-[#8e8e93]'
+                }`}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </Section>
 
@@ -188,12 +229,33 @@ export default function SettingsView() {
           </button>
         }
       >
+        {isEditing && (
+          <div className="py-2">
+            <div className="text-xs text-[#8e8e93] mb-2">TM Percentage</div>
+            <div className="flex gap-2">
+              {([85, 90] as const).map((pct) => (
+                <button
+                  key={pct}
+                  onClick={() => { if (pct !== (profile.tmPercentage ?? 90)) updateProfile({ tmPercentage: pct }) }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    (profile.tmPercentage ?? 90) === pct
+                      ? 'bg-[var(--color-accent)] text-white'
+                      : 'bg-[#38383a] text-[#8e8e93]'
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {MAIN_LIFTS.map((lift) => {
           const key = editKeys[lift]
+          const tmPct = (profile.tmPercentage ?? 90) / 100
           if (isEditing) {
             const val = editRMs[key]
             const num = Number(val)
-            const newTM = num > 0 ? roundWeight(num * 0.9) : tmMap[lift]
+            const newTM = num > 0 ? roundWeight(num * tmPct, units) : tmMap[lift]
             return (
               <div key={lift} className="py-2">
                 <div className="font-medium text-sm mb-1">{liftDisplayName(lift)}</div>
@@ -206,11 +268,11 @@ export default function SettingsView() {
                     onChange={(e) => setEditRMs((p) => ({ ...p, [key]: e.target.value }))}
                     className="flex-1 text-sm"
                   />
-                  <span className="text-xs text-[#8e8e93]">lbs</span>
+                  <span className="text-xs text-[#8e8e93]">{units}</span>
                 </div>
                 {num > 0 && (
                   <div className={`text-xs mt-1 ${newTM !== tmMap[lift] ? 'text-[var(--color-accent)]' : 'text-[#8e8e93]'}`}>
-                    TM: {tmMap[lift]} → {newTM} lbs
+                    TM: {tmMap[lift]} → {newTM} {units}
                   </div>
                 )}
               </div>
@@ -220,9 +282,9 @@ export default function SettingsView() {
             <div key={lift} className="flex items-center justify-between py-2">
               <div>
                 <div className="font-medium text-sm">{liftDisplayName(lift)}</div>
-                <div className="text-xs text-[#8e8e93]">1RM: {Math.round(rmMap[lift])} lbs</div>
+                <div className="text-xs text-[#8e8e93]">1RM: {Math.round(rmMap[lift])} {units}</div>
               </div>
-              <div className="text-base font-bold text-[var(--color-accent)]">{tmMap[lift]} lbs</div>
+              <div className="text-base font-bold text-[var(--color-accent)]">{tmMap[lift]} {units}</div>
             </div>
           )
         })}

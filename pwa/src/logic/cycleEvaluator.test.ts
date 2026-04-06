@@ -112,6 +112,12 @@ describe('suggestedTMs', () => {
     currentVariant: 'fsl',
     leaderCycleCount: 0,
     anchorCycleCount: 0,
+    tmPercentage: 90,
+    sex: 'male',
+    units: 'lbs',
+    isDeloading: false,
+    deloadType: null,
+    deloadDay: 1,
     bodyWeightLbs: 180,
     bodyWeightLastUpdated: null,
     createdAt: '2025-01-01',
@@ -136,5 +142,20 @@ describe('suggestedTMs', () => {
     // All lifts failed week 1 AMRAP (4 < 5)
     expect(tms[MainLift.Squat]).toBe(270)
     expect(tms[MainLift.BenchPress]).toBe(202.5)
+  })
+
+  it('uses kg progression amounts when units are kg', () => {
+    // TMs are stored in lbs; progression should be +5 kg for SQ/DL, +2.5 kg for BP/OHP
+    const kgProfile: UserProfile = { ...profile, units: 'kg' }
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
+    const cycleResult = evaluateCycle(sessions, setLogs, 1)
+    const tms = suggestedTMs(kgProfile, cycleResult)
+
+    // +5 kg ≈ +11.02 lbs for squat/deadlift
+    expect(tms[MainLift.Squat]).toBeCloseTo(270 + 5 * 2.20462, 1)
+    expect(tms[MainLift.Deadlift]).toBeCloseTo(360 + 5 * 2.20462, 1)
+    // +2.5 kg ≈ +5.51 lbs for bench/OHP
+    expect(tms[MainLift.BenchPress]).toBeCloseTo(202.5 + 2.5 * 2.20462, 1)
+    expect(tms[MainLift.ShoulderPress]).toBeCloseTo(121.5 + 2.5 * 2.20462, 1)
   })
 })

@@ -9,6 +9,7 @@ import WorkoutDetailView from './views/WorkoutDetailView'
 import PRsView from './views/PRsView'
 import E1RMChartView from './views/E1RMChartView'
 import SettingsView from './views/SettingsView'
+import DeloadWorkoutView from './views/DeloadWorkoutView'
 
 export default function App() {
   const profile = useStore((s) => s.profile)
@@ -19,6 +20,17 @@ export default function App() {
       <div className="h-full pt-safe">
         <Routes>
           <Route path="*" element={<OnboardingView />} />
+        </Routes>
+      </div>
+    )
+  }
+
+  // Deload week in progress
+  if (profile.isDeloading) {
+    return (
+      <div className="h-full pt-safe">
+        <Routes>
+          <Route path="*" element={<DeloadWorkoutView />} />
         </Routes>
       </div>
     )

@@ -36,7 +36,17 @@ export function liftShortName(lift: MainLift): string {
   }
 }
 
-export function liftProgressionAmount(lift: MainLift): number {
+export function liftProgressionAmount(lift: MainLift, units: Units = 'lbs'): number {
+  if (units === 'kg') {
+    switch (lift) {
+      case MainLift.Squat:
+      case MainLift.Deadlift:
+        return 5
+      case MainLift.BenchPress:
+      case MainLift.ShoulderPress:
+        return 2.5
+    }
+  }
   switch (lift) {
     case MainLift.Squat:
     case MainLift.Deadlift:
@@ -50,6 +60,36 @@ export function liftProgressionAmount(lift: MainLift): number {
 export function liftFromDay(day: number): MainLift | null {
   if (day >= 1 && day <= 4) return day as MainLift
   return null
+}
+
+// ============================================================
+// Units
+// ============================================================
+
+export type Units = 'lbs' | 'kg'
+
+// Conversion constants
+export const KG_TO_LBS = 2.20462
+export const LBS_TO_KG = 1 / KG_TO_LBS
+
+/** Convert a weight stored in lbs to the user's display unit */
+export function toDisplayWeight(storedLbs: number, units: Units): number {
+  return units === 'kg' ? storedLbs * LBS_TO_KG : storedLbs
+}
+
+/** Convert a user-entered weight (in display units) to lbs for storage */
+export function toStorageLbs(value: number, units: Units): number {
+  return units === 'kg' ? value * KG_TO_LBS : value
+}
+
+/** Convert stored lbs to display units, rounded appropriately.
+ *  lbs: round to nearest 0.5 (preserves plate-loadable precision).
+ *  kg: round to nearest integer. */
+export function displayRound(storedLbs: number, units: Units): number {
+  const val = toDisplayWeight(storedLbs, units)
+  if (units === 'kg') return Math.round(val)
+  // Round to nearest 0.5 for lbs (handles floating point from conversions)
+  return Math.round(val * 2) / 2
 }
 
 // ============================================================
@@ -75,6 +115,9 @@ export type ProgramVariant = (typeof ProgramVariant)[keyof typeof ProgramVariant
 export const PhaseType = { Leader: 'leader', Anchor: 'anchor' } as const
 export type PhaseType = (typeof PhaseType)[keyof typeof PhaseType]
 
+export const DeloadType = { TMTest: 'tm_test', Deload: 'deload' } as const
+export type DeloadType = (typeof DeloadType)[keyof typeof DeloadType]
+
 // ============================================================
 // Data Models
 // ============================================================
@@ -95,6 +138,12 @@ export interface UserProfile {
   currentVariant: ProgramVariant
   leaderCycleCount: number
   anchorCycleCount: number
+  tmPercentage: 85 | 90
+  sex: 'male' | 'female'
+  units: Units
+  isDeloading: boolean
+  deloadType: DeloadType | null
+  deloadDay: number  // 1-4 during deload
   bodyWeightLbs: number | null
   bodyWeightLastUpdated: string | null  // ISO date
   createdAt: string                     // ISO date

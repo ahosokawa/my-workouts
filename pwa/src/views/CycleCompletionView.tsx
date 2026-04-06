@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, DeloadType, displayRound, toStorageLbs } from '../types'
 import type { AccessoryExercise } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
@@ -12,11 +12,13 @@ export default function CycleCompletionView() {
   const setLogs = useStore((s) => s.setLogs)
   const updateProfile = useStore((s) => s.updateProfile)
   const startNewCycle = useStore((s) => s.startNewCycle)
+  const startDeload = useStore((s) => s.startDeload)
   const customAccessories = useStore((s) => s.customAccessories)
   const setCustomAccessories = useStore((s) => s.setCustomAccessories)
 
   if (!profile) return null
 
+  const units = profile.units ?? 'lbs'
   const cycleResult = useMemo(
     () => evaluateCycle(sessions, setLogs, profile.cycleNumber),
     [sessions, setLogs, profile.cycleNumber],
@@ -30,7 +32,7 @@ export default function CycleCompletionView() {
   const [editedTMs, setEditedTMs] = useState<Record<number, string>>(() => {
     const m: Record<number, string> = {}
     for (const lift of MAIN_LIFTS) {
-      m[lift] = String(suggested[lift])
+      m[lift] = String(displayRound(suggested[lift], units))
     }
     return m
   })
@@ -41,7 +43,7 @@ export default function CycleCompletionView() {
 
   const [bodyWeight, setBodyWeight] = useState(() =>
     profile.bodyWeightLbs && profile.bodyWeightLbs > 0
-      ? String(Math.round(profile.bodyWeightLbs))
+      ? String(displayRound(profile.bodyWeightLbs, units))
       : '',
   )
 
@@ -61,18 +63,21 @@ export default function CycleCompletionView() {
     return m
   })
 
+  const [deloadOption, setDeloadOption] = useState<'deload' | 'tm_test' | 'skip'>('deload')
+
   const tmMap: Record<number, number> = {
-    [MainLift.Squat]: profile.squatTM,
-    [MainLift.BenchPress]: profile.benchTM,
-    [MainLift.Deadlift]: profile.deadliftTM,
-    [MainLift.ShoulderPress]: profile.pressTM,
+    [MainLift.Squat]: displayRound(profile.squatTM, units),
+    [MainLift.BenchPress]: displayRound(profile.benchTM, units),
+    [MainLift.Deadlift]: displayRound(profile.deadliftTM, units),
+    [MainLift.ShoulderPress]: displayRound(profile.pressTM, units),
   }
 
-  function handleStart() {
-    const sq = Number(editedTMs[MainLift.Squat]) || profile!.squatTM
-    const bp = Number(editedTMs[MainLift.BenchPress]) || profile!.benchTM
-    const dl = Number(editedTMs[MainLift.Deadlift]) || profile!.deadliftTM
-    const sp = Number(editedTMs[MainLift.ShoulderPress]) || profile!.pressTM
+  function applyTMsAndAccessories() {
+    // User-edited TMs are in display units — convert to lbs for storage
+    const sq = toStorageLbs(Number(editedTMs[MainLift.Squat]), units) || profile!.squatTM
+    const bp = toStorageLbs(Number(editedTMs[MainLift.BenchPress]), units) || profile!.benchTM
+    const dl = toStorageLbs(Number(editedTMs[MainLift.Deadlift]), units) || profile!.deadliftTM
+    const sp = toStorageLbs(Number(editedTMs[MainLift.ShoulderPress]), units) || profile!.pressTM
 
     const bw = Number(bodyWeight)
     updateProfile({
@@ -80,13 +85,21 @@ export default function CycleCompletionView() {
       benchTM: bp,
       deadliftTM: dl,
       pressTM: sp,
-      ...(bw > 0 ? { bodyWeightLbs: bw, bodyWeightLastUpdated: new Date().toISOString() } : {}),
+      ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
-
-    // Save custom accessories
     setCustomAccessories(dayAccessories)
+  }
 
-    startNewCycle(selectedVariant)
+  function handleStart() {
+    applyTMsAndAccessories()
+
+    if (deloadOption === 'skip') {
+      startNewCycle(selectedVariant)
+    } else {
+      // Save the selected variant for after deload
+      updateProfile({ currentVariant: selectedVariant })
+      startDeload(deloadOption === 'tm_test' ? DeloadType.TMTest : DeloadType.Deload)
+    }
   }
 
   return (
@@ -127,7 +140,7 @@ export default function CycleCompletionView() {
                 )}
                 {result?.amrapDetails.map((d, i) => (
                   <div key={i} className="ml-7 text-[10px] text-[#8e8e93]">
-                    Week {d.week}: {Math.round(d.weight)} lbs x {d.actualReps} (min: {d.targetReps})
+                    Week {d.week}: {displayRound(d.weight, units)} {units} x {d.actualReps} (min: {d.targetReps})
                     {' '}
                     <span className={d.metMinimum ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}>
                       {d.metMinimum ? '✓' : '✗'}
@@ -157,7 +170,7 @@ export default function CycleCompletionView() {
                 onChange={(e) => setBodyWeight(e.target.value)}
                 className="w-20 text-right text-sm"
               />
-              <span className="text-xs text-[#8e8e93]">lbs</span>
+              <span className="text-xs text-[#8e8e93]">{units}</span>
             </div>
           </div>
           {!bodyWeight && (
@@ -183,9 +196,9 @@ export default function CycleCompletionView() {
                   <div>
                     <div className="font-medium text-sm">{liftDisplayName(lift)}</div>
                     <div className="text-xs text-[#8e8e93]">
-                      Current: {current} lbs
+                      Current: {current} {units}
                       {cycleResult.liftResults[lift]?.amrapMet && (
-                        <span className="text-[var(--color-green)]"> (+{liftProgressionAmount(lift)})</span>
+                        <span className="text-[var(--color-green)]"> (+{liftProgressionAmount(lift, units)})</span>
                       )}
                     </div>
                   </div>
@@ -197,12 +210,12 @@ export default function CycleCompletionView() {
                       onChange={(e) => setEditedTMs((p) => ({ ...p, [lift]: e.target.value }))}
                       className="w-20 text-right text-sm"
                     />
-                    <span className="text-xs text-[#8e8e93]">lbs</span>
+                    <span className="text-xs text-[#8e8e93]">{units}</span>
                   </div>
                 </div>
                 {delta !== 0 && num > 0 && (
                   <div className={`text-xs mt-1 ${delta > 0 ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}`}>
-                    {delta > 0 ? '+' : ''}{delta} lbs from current
+                    {delta > 0 ? '+' : ''}{delta} {units} from current
                   </div>
                 )}
               </div>
@@ -268,18 +281,52 @@ export default function CycleCompletionView() {
       </div>
 
       {/* Day-by-Day Accessory Preview / Editor */}
-      <div className="mb-6">
+      <div className="mb-4">
         <AccessoryEditor value={dayAccessories} onChange={setDayAccessories} />
+      </div>
+
+      {/* Deload Week Option */}
+      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
+        <div className="px-4 pt-3 pb-1">
+          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">7th Week Protocol</h2>
+        </div>
+        <div className="px-4 pb-3">
+          <p className="text-xs text-[#8e8e93] mb-3">
+            Optional deload week before starting the next cycle.
+          </p>
+          <div className="space-y-2">
+            {([
+              { value: 'deload' as const, label: 'Deload', desc: 'Light sets at 40-60% TM (recommended)' },
+              { value: 'tm_test' as const, label: 'TM Test', desc: 'Work up to TM for 1 rep per lift' },
+              { value: 'skip' as const, label: 'Skip', desc: 'Go straight to next cycle' },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDeloadOption(opt.value)}
+                className={`w-full text-left rounded-lg p-3 transition-colors ${
+                  deloadOption === opt.value
+                    ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                    : 'border border-[#38383a] bg-[#1c1c1e]'
+                }`}
+              >
+                <div className="font-semibold text-sm">{opt.label}</div>
+                <div className="text-xs text-[#8e8e93]">{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1" />
 
-      {/* Start Next Cycle */}
+      {/* Start Next Cycle or Deload */}
       <button
         onClick={handleStart}
         className="w-full py-3 rounded-xl bg-[var(--color-accent)] font-semibold text-white text-center"
       >
-        Start Cycle {profile.cycleNumber + 1}
+        {deloadOption === 'skip'
+          ? `Start Cycle ${profile.cycleNumber + 1}`
+          : `Start ${deloadOption === 'tm_test' ? 'TM Test' : 'Deload'} Week`}
       </button>
     </div>
   )

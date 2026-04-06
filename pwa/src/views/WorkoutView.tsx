@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, liftFromDay, AccessoryWeightType } from '../types'
+import { liftDisplayName, liftFromDay, AccessoryWeightType, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { estimated1RM } from '../logic/brzycki'
 import { calculateWilks } from '../logic/wilks'
-import { BARBELL_WEIGHT } from '../logic/plates'
+import { barbellWeight } from '../logic/plates'
 import PlateBreakdown from '../components/PlateBreakdown'
 import RestTimer from '../components/RestTimer'
 import { requestNotificationPermission } from '../notifications'
@@ -33,6 +33,7 @@ export default function WorkoutView() {
   const lift = liftFromDay(profile.currentDay)
   if (!lift) return null
 
+  const units = profile.units ?? 'lbs'
   const tm = useStore.getState().getTrainingMax(lift)
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
@@ -90,9 +91,9 @@ export default function WorkoutView() {
     const override = aw.mainWeights?.[index]
     if (override !== undefined && override !== '') {
       const n = Number(override)
-      if (n > 0) return n
+      if (n > 0) return n  // override is in display units
     }
-    return sets[index].weight
+    return displayRound(sets[index].weight, units)  // prescribed lbs → display units
   }
 
   function effectiveMainReps(index: number): number {
@@ -112,15 +113,15 @@ export default function WorkoutView() {
         [0]
 
       if (ex.weightType === AccessoryWeightType.Bodyweight) {
-        if (profile?.bodyWeightLbs && profile.bodyWeightLbs > 0) return String(Math.round(profile.bodyWeightLbs))
-        if (last) return String(Math.round(last.weight))
+        if (profile?.bodyWeightLbs && profile.bodyWeightLbs > 0) return String(displayRound(profile.bodyWeightLbs, units))
+        if (last) return String(displayRound(last.weight, units))
       }
       if ((ex.weightType === AccessoryWeightType.Standard || ex.weightType === AccessoryWeightType.Barbell) && last) {
-        return String(Math.round(last.weight))
+        return String(displayRound(last.weight, units))
       }
       return ''
     },
-    [setLogs, profile],
+    [setLogs, profile, units],
   )
 
   const defaultReps = useCallback(
@@ -269,13 +270,14 @@ export default function WorkoutView() {
     for (let i = 0; i < sets.length; i++) {
       const s = sets[i]
       const completed = completedMain.has(i)
-      const weight = effectiveMainWeight(i)
+      const weight = effectiveMainWeight(i)  // in display units
+      const weightLbs = toStorageLbs(weight, units)  // convert to lbs for storage
       const reps = effectiveMainReps(i)
       logEntries.push({
         exerciseName: liftDisplayName(lift),
         isMainLift: true,
         setIndex: i,
-        weight,
+        weight: weightLbs,
         targetReps: reps,
         actualReps: s.isAMRAP ? aw.amrapReps : null,
         isAMRAP: s.isAMRAP,
@@ -283,7 +285,7 @@ export default function WorkoutView() {
         completedAt: completed ? new Date().toISOString() : null,
       })
       if (s.isAMRAP && completed) {
-        curAmrapWeight = weight
+        curAmrapWeight = weightLbs
         curAmrapReps = aw.amrapReps
       }
     }
@@ -292,11 +294,12 @@ export default function WorkoutView() {
       for (let i = 0; i < ex.sets; i++) {
         const key = `${ex.name}-${i}`
         const completed = completedAccessory.has(key)
+        const accW = Number(aw.accWeights[key] || '0') || 0
         logEntries.push({
           exerciseName: ex.name,
           isMainLift: false,
           setIndex: i,
-          weight: Number(aw.accWeights[key] || '0') || 0,
+          weight: toStorageLbs(accW, units),  // user entered in display units
           targetReps: Number(aw.accReps[key] || String(ex.reps)) || ex.reps,
           actualReps: null,
           isAMRAP: false,
@@ -332,7 +335,7 @@ export default function WorkoutView() {
       const bp = bestFor('Bench Press')
       const dl = bestFor('Deadlift')
       if (sq > 0 || bp > 0 || dl > 0) {
-        const w = calculateWilks(profile.bodyWeightLbs, sq, bp, dl)
+        const w = calculateWilks(profile.bodyWeightLbs, sq, bp, dl, profile.sex ?? 'male', 'lbs')
         if (w !== null) {
           addWilksEntry({
             date: new Date().toISOString(),
@@ -408,13 +411,14 @@ export default function WorkoutView() {
             isCompleted={completedMain.has(i)}
             amrapReps={aw.amrapReps}
             setAmrapReps={(v) => updateAW({ amrapReps: v })}
-            bestE1RM={bestE1RM}
+            bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
             minRepsToBeat={minRepsToBeat}
             overrideWeight={aw.mainWeights?.[i]}
             overrideReps={aw.mainReps?.[i]}
             onWeightChange={(v) => updateMainWeight(i, v)}
             onRepsChange={(v) => updateMainReps(i, v)}
             onToggle={() => toggleSet('main', i)}
+            units={units}
           />
         ))}
       </CollapsibleSection>
@@ -434,13 +438,14 @@ export default function WorkoutView() {
             isCompleted={completedMain.has(i)}
             amrapReps={aw.amrapReps}
             setAmrapReps={(v) => updateAW({ amrapReps: v })}
-            bestE1RM={bestE1RM}
+            bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
             minRepsToBeat={minRepsToBeat}
             overrideWeight={aw.mainWeights?.[i]}
             overrideReps={aw.mainReps?.[i]}
             onWeightChange={(v) => updateMainWeight(i, v)}
             onRepsChange={(v) => updateMainReps(i, v)}
             onToggle={() => toggleSet('main', i)}
+            units={units}
           />
         ))}
       </CollapsibleSection>
@@ -487,14 +492,14 @@ export default function WorkoutView() {
                         <input
                           type="number"
                           inputMode="decimal"
-                          placeholder="lbs"
+                          placeholder={units}
                           value={aw.accWeights[key] ?? ''}
                           onChange={(e) => { e.stopPropagation(); updateAccWeight(ex, si, e.target.value) }}
                           onClick={(e) => e.stopPropagation()}
                           className="w-16 text-right text-base py-1 px-2"
                         />
                       ) : (
-                        accWeight > 0 ? <span className="text-base text-[#8e8e93]">{Math.round(accWeight)} lbs</span> : null
+                        accWeight > 0 ? <span className="text-base text-[#8e8e93]">{Math.round(accWeight)} {units}</span> : null
                       )
                     )}
 
@@ -515,9 +520,9 @@ export default function WorkoutView() {
                       </span>
                     )}
                   </div>
-                  {ex.weightType === AccessoryWeightType.Barbell && accWeight > BARBELL_WEIGHT && (
+                  {ex.weightType === AccessoryWeightType.Barbell && accWeight > barbellWeight(units) && (
                     <div className="ml-10 mt-1">
-                      <PlateBreakdown weight={accWeight} />
+                      <PlateBreakdown weight={accWeight} units={units} />
                     </div>
                   )}
                 </div>

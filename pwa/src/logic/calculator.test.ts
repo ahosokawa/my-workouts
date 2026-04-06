@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { prescribedSets, roundWeight, amrapMinimum } from './calculator'
-import { ProgramVariant } from '../types'
+import { prescribedSets, roundWeight, amrapMinimum, deloadSets } from './calculator'
+import { ProgramVariant, DeloadType } from '../types'
 
 describe('roundWeight', () => {
   it('rounds to nearest 2.5', () => {
@@ -12,6 +12,13 @@ describe('roundWeight', () => {
 
   it('handles zero', () => {
     expect(roundWeight(0)).toBe(0)
+  })
+
+  it('rounds to nearest 1 for kg', () => {
+    expect(roundWeight(100, 'kg')).toBe(100)
+    expect(roundWeight(100.4, 'kg')).toBe(100)
+    expect(roundWeight(100.5, 'kg')).toBe(101)
+    expect(roundWeight(99.6, 'kg')).toBe(100)
   })
 })
 
@@ -154,5 +161,43 @@ describe('prescribedSets with BBS variant', () => {
   it('total sets = 3 warmup + 3 working + 10 supplemental = 16', () => {
     const sets = prescribedSets(tm, 1, ProgramVariant.BBS)
     expect(sets).toHaveLength(16)
+  })
+})
+
+describe('deloadSets', () => {
+  const tm = 200
+
+  it('TM Test: 3 warmups + 4 working sets (up to TM)', () => {
+    const sets = deloadSets(tm, DeloadType.TMTest)
+    expect(sets).toHaveLength(7)
+
+    const warmups = sets.filter((s) => s.isWarmup)
+    expect(warmups).toHaveLength(3)
+
+    const working = sets.filter((s) => !s.isWarmup)
+    expect(working).toHaveLength(4)
+    expect(working[3].percentage).toBe(1.0)
+    expect(working[3].weight).toBe(tm)
+    expect(working[3].targetReps).toBe(1)
+  })
+
+  it('TM Test: no AMRAP sets', () => {
+    const sets = deloadSets(tm, DeloadType.TMTest)
+    expect(sets.every((s) => !s.isAMRAP)).toBe(true)
+  })
+
+  it('Deload: 3 light sets at 40/50/60%', () => {
+    const sets = deloadSets(tm, DeloadType.Deload)
+    expect(sets).toHaveLength(3)
+    expect(sets[0].percentage).toBe(0.40)
+    expect(sets[1].percentage).toBe(0.50)
+    expect(sets[2].percentage).toBe(0.60)
+    expect(sets.every((s) => !s.isAMRAP)).toBe(true)
+  })
+
+  it('rounds weights in lbs (nearest 2.5)', () => {
+    const sets = deloadSets(100, DeloadType.Deload)
+    // 100 * 0.40 = 40 → rounds to 40 (nearest 2.5 lbs)
+    expect(sets[0].weight).toBe(40)
   })
 })

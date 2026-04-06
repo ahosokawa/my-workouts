@@ -1,17 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant } from './types'
-import { liftFromDay, MAIN_LIFTS, PhaseType } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType } from './types'
+import { liftFromDay, MAIN_LIFTS, PhaseType, toStorageLbs, toDisplayWeight } from './types'
+import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
 import { getAccessories } from './logic/accessories'
 
 // ============================================================
 // Helpers
 // ============================================================
-
-function roundToNearest2_5(value: number): number {
-  return Math.round(value / 2.5) * 2.5
-}
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -75,11 +72,13 @@ interface AppState {
   restNotifyMinutes: number
 
   // Profile actions
-  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant) => void
+  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant, tmPercentage?: 85 | 90, sex?: 'male' | 'female', units?: Units) => void
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: () => boolean  // returns true if cycle completed
   startNewCycle: (variant?: ProgramVariant) => void
+  startDeload: (deloadType: DeloadType) => void
+  advanceDeloadDay: () => void
 
   // Workout actions
   saveWorkout: (session: Omit<WorkoutSession, 'id'>, logs: Omit<SetLog, 'id' | 'sessionId'>[]) => string
@@ -137,6 +136,12 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
     if (!state.profile.currentVariant) updates.currentVariant = 'fsl'
     if (state.profile.leaderCycleCount === undefined) updates.leaderCycleCount = 0
     if (state.profile.anchorCycleCount === undefined) updates.anchorCycleCount = 0
+    if (state.profile.tmPercentage === undefined) updates.tmPercentage = 90
+    if (!state.profile.sex) updates.sex = 'male'
+    if (!state.profile.units) updates.units = 'lbs'
+    if (state.profile.isDeloading === undefined) updates.isDeloading = false
+    if (state.profile.deloadType === undefined) updates.deloadType = null
+    if (state.profile.deloadDay === undefined) updates.deloadDay = 1
     if (Object.keys(updates).length > 0) {
       state.profile = { ...state.profile, ...updates }
     }
@@ -161,16 +166,28 @@ export const useStore = create<AppState>()(
       restNotifyEnabled: true,
       restNotifyMinutes: 3,
 
-      createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant) => {
+      createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units) => {
+        const pct = (tmPercentage ?? 90) / 100
+        const u = units ?? 'lbs'
+        // User enters values in their units — convert to lbs for storage
+        const sqLbs = toStorageLbs(squatRM, u)
+        const bpLbs = toStorageLbs(benchRM, u)
+        const dlLbs = toStorageLbs(deadliftRM, u)
+        const prLbs = toStorageLbs(pressRM, u)
+        // Compute TMs in user units (round nicely), then convert to lbs
+        const sqTM = toStorageLbs(roundWeight(squatRM * pct, u), u)
+        const bpTM = toStorageLbs(roundWeight(benchRM * pct, u), u)
+        const dlTM = toStorageLbs(roundWeight(deadliftRM * pct, u), u)
+        const prTM = toStorageLbs(roundWeight(pressRM * pct, u), u)
         const profile: UserProfile = {
-          squatOneRepMax: squatRM,
-          benchOneRepMax: benchRM,
-          deadliftOneRepMax: deadliftRM,
-          pressOneRepMax: pressRM,
-          squatTM: roundToNearest2_5(squatRM * 0.9),
-          benchTM: roundToNearest2_5(benchRM * 0.9),
-          deadliftTM: roundToNearest2_5(deadliftRM * 0.9),
-          pressTM: roundToNearest2_5(pressRM * 0.9),
+          squatOneRepMax: sqLbs,
+          benchOneRepMax: bpLbs,
+          deadliftOneRepMax: dlLbs,
+          pressOneRepMax: prLbs,
+          squatTM: sqTM,
+          benchTM: bpTM,
+          deadliftTM: dlTM,
+          pressTM: prTM,
           currentWeek: 1,
           currentDay: 1,
           cycleNumber: 1,
@@ -178,6 +195,12 @@ export const useStore = create<AppState>()(
           currentVariant: variant ?? 'fsl',
           leaderCycleCount: 0,
           anchorCycleCount: 0,
+          tmPercentage: tmPercentage ?? 90,
+          sex: sex ?? 'male',
+          units: u,
+          isDeloading: false,
+          deloadType: null,
+          deloadDay: 1,
           bodyWeightLbs: null,
           bodyWeightLastUpdated: null,
           createdAt: new Date().toISOString(),
@@ -194,13 +217,17 @@ export const useStore = create<AppState>()(
       recalculateTMs: () => {
         const { profile } = get()
         if (!profile) return
+        const pct = (profile.tmPercentage ?? 90) / 100
+        const u = profile.units ?? 'lbs'
+        // Convert stored lbs 1RMs to display units, compute TM, round, convert back
+        const computeTM = (rmLbs: number) => toStorageLbs(roundWeight(toDisplayWeight(rmLbs, u) * pct, u), u)
         set({
           profile: {
             ...profile,
-            squatTM: roundToNearest2_5(profile.squatOneRepMax * 0.9),
-            benchTM: roundToNearest2_5(profile.benchOneRepMax * 0.9),
-            deadliftTM: roundToNearest2_5(profile.deadliftOneRepMax * 0.9),
-            pressTM: roundToNearest2_5(profile.pressOneRepMax * 0.9),
+            squatTM: computeTM(profile.squatOneRepMax),
+            benchTM: computeTM(profile.benchOneRepMax),
+            deadliftTM: computeTM(profile.deadliftOneRepMax),
+            pressTM: computeTM(profile.pressOneRepMax),
           },
         })
       },
@@ -274,8 +301,40 @@ export const useStore = create<AppState>()(
             currentVariant: newVariant,
             leaderCycleCount,
             anchorCycleCount,
+            isDeloading: false,
+            deloadType: null,
+            deloadDay: 1,
           },
         })
+      },
+
+      startDeload: (deloadType: DeloadType) => {
+        const { profile } = get()
+        if (!profile) return
+        set({
+          profile: {
+            ...profile,
+            isDeloading: true,
+            deloadType,
+            deloadDay: 1,
+            isCycleComplete: false,
+          },
+        })
+      },
+
+      advanceDeloadDay: () => {
+        const { profile } = get()
+        if (!profile || !profile.isDeloading) return
+        const nextDay = profile.deloadDay + 1
+        if (nextDay > 4) {
+          // Deload complete — start next cycle automatically
+          // The variant was already saved to profile before deload started
+          get().startNewCycle(profile.currentVariant)
+        } else {
+          set({
+            profile: { ...profile, deloadDay: nextDay },
+          })
+        }
       },
 
       saveWorkout: (session, logs) => {

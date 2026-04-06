@@ -1,4 +1,4 @@
-import type { PrescribedSet, ProgramVariant } from '../types'
+import type { PrescribedSet, ProgramVariant, DeloadType, Units } from '../types'
 import { getVariantConfig } from './variants'
 
 // ============================================================
@@ -52,9 +52,10 @@ export function amrapMinimum(week: number): number {
   }
 }
 
-/** Round weight to nearest 2.5 lbs (supports 1.25 lb plates per side) */
-export function roundWeight(weight: number): number {
-  return Math.round(weight / 2.5) * 2.5
+/** Round weight to nearest increment based on units (2.5 lbs or 1 kg) */
+export function roundWeight(weight: number, units: Units = 'lbs'): number {
+  const increment = units === 'kg' ? 1 : 2.5
+  return Math.round(weight / increment) * increment
 }
 
 /** Generate all prescribed sets for a main lift on a given week.
@@ -111,6 +112,64 @@ export function prescribedSets(trainingMax: number, week: number, variant: Progr
       isSupplemental: true,
       weight: suppWeight,
     })
+  }
+
+  return sets
+}
+
+/**
+ * Generate deload sets for the 7th week protocol.
+ * - TM Test: warmups (40/50/60%) + work up to TM for 1 rep
+ * - Deload: 3 sets at 40%, 50%, 60% x 5 reps (lighter recovery work)
+ */
+export function deloadSets(trainingMax: number, deloadType: DeloadType): PrescribedSet[] {
+  const sets: PrescribedSet[] = []
+  let counter = 0
+
+  if (deloadType === 'tm_test') {
+    // Warmups
+    for (const [pct, reps] of WARMUP_SETS) {
+      counter++
+      sets.push({
+        id: `set-${counter}`,
+        setNumber: counter,
+        percentage: pct,
+        targetReps: reps,
+        isWarmup: true,
+        isAMRAP: false,
+        isSupplemental: false,
+        weight: roundWeight(trainingMax * pct),
+      })
+    }
+    // Work up: 70% x 1, 80% x 1, 90% x 1, 100% TM x 1
+    for (const pct of [0.70, 0.80, 0.90, 1.00]) {
+      counter++
+      sets.push({
+        id: `set-${counter}`,
+        setNumber: counter,
+        percentage: pct,
+        targetReps: 1,
+        isWarmup: false,
+        isAMRAP: false,
+        isSupplemental: false,
+        weight: roundWeight(trainingMax * pct),
+      })
+    }
+  } else {
+    // Deload: 3 sets at 40%, 50%, 60% x 5 reps
+    for (const [pct, reps] of WARMUP_SETS) {
+      counter++
+      sets.push({
+        id: `set-${counter}`,
+        setNumber: counter,
+        percentage: pct,
+        targetReps: reps,
+        isWarmup: false,
+        isAMRAP: false,
+        isSupplemental: false,
+        weight: roundWeight(trainingMax * pct),
+      })
+    }
   }
 
   return sets

@@ -1,8 +1,11 @@
 import { useStore } from '../store'
-import { MAIN_LIFTS, liftDisplayName, liftShortName } from '../types'
+import { MAIN_LIFTS, liftDisplayName, liftShortName, displayRound } from '../types'
+import type { Units } from '../types'
 
 export default function PRBoardView() {
   const setLogs = useStore((s) => s.setLogs)
+  const profile = useStore((s) => s.profile)
+  const units: Units = profile?.units ?? 'lbs'
   const completedMain = setLogs.filter((l) => l.isMainLift && l.isCompleted)
 
   if (completedMain.length === 0) {
@@ -72,7 +75,7 @@ export default function PRBoardView() {
                           entry.isRecent ? 'font-bold text-[var(--color-accent)]' : ''
                         }`}
                       >
-                        {Math.round(entry.weight)}
+                        {displayRound(entry.weight, units)}
                       </span>
                     ) : (
                       <span className="text-sm text-[#38383a]">--</span>

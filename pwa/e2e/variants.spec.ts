@@ -53,8 +53,9 @@ test.describe('Cycle completion — variant selector', () => {
     await loadFixture(page, 'cycle-complete-fsl.json')
     await page.goto('/')
 
-    // Select BBB and start
+    // Select BBB, skip deload, and start
     await page.getByRole('button', { name: /BBB/ }).click()
+    await page.getByRole('button', { name: /Skip/ }).click()
     await page.getByRole('button', { name: /Start Cycle 2/ }).click()
 
     // Should now be on workout view with BBB in header

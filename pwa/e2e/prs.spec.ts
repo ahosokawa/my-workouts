@@ -25,8 +25,8 @@ test.describe('PRs view', () => {
 
     // Should show "Current Wilks Score" heading
     await expect(page.getByText('Current Wilks Score')).toBeVisible()
-    // Latest score is 270.0
-    await expect(page.getByText('270.0').first()).toBeVisible()
+    // Recomputed from raw data with male coefficients
+    await expect(page.getByText('266.2').first()).toBeVisible()
   })
 
   test('clicking a lift navigates to e1RM chart', async ({ page }) => {
@@ -36,6 +36,27 @@ test.describe('PRs view', () => {
 
     // Should navigate to chart view with back link
     await expect(page.getByText('← Personal Records')).toBeVisible()
+  })
+})
+
+test.describe('Wilks — sex toggle updates score', () => {
+  test('changing sex in settings recomputes Wilks score', async ({ page }) => {
+    await loadFixture(page, 'multi-cycle-with-prs.json')
+    await page.goto('/')
+
+    // Check initial male Wilks score
+    await page.getByRole('link', { name: /prs/i }).click()
+    await page.getByRole('button', { name: 'Wilks' }).click()
+    await expect(page.getByText('266.2').first()).toBeVisible()
+
+    // Change sex to female in settings
+    await page.getByRole('link', { name: /settings/i }).click()
+    await page.getByRole('button', { name: 'Female' }).click()
+
+    // Go back to PRs and verify score changed
+    await page.getByRole('link', { name: /prs/i }).click()
+    await page.getByRole('button', { name: 'Wilks' }).click()
+    await expect(page.getByText('358.2').first()).toBeVisible()
   })
 })
 

@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, displayRound } from '../types'
 import { estimated1RM } from '../logic/brzycki'
-import { formatWilks } from '../logic/wilks'
+import { calculateWilks, formatWilks } from '../logic/wilks'
 import PRBoardView from './PRBoardView'
 
 type Tab = 'e1rm' | 'board' | 'wilks'
 
 export default function PRsView() {
   const [tab, setTab] = useState<Tab>('e1rm')
+  const profile = useStore((s) => s.profile)
   const setLogs = useStore((s) => s.setLogs)
   const wilksEntries = useStore((s) => s.wilksEntries)
   const navigate = useNavigate()
+  const units = profile?.units ?? 'lbs'
 
   const amrapLogs = setLogs.filter(
     (l) => l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
@@ -77,11 +79,11 @@ export default function PRsView() {
                     >
                       <div>
                         <div className="font-medium text-sm">{liftDisplayName(lift)}</div>
-                        {best && <div className="text-xs text-[#8e8e93]">{Math.round(best.weight)} lbs x {best.reps}</div>}
+                        {best && <div className="text-xs text-[#8e8e93]">{displayRound(best.weight, units)} {units} x {best.reps}</div>}
                       </div>
                       <div className="flex items-center gap-2">
                         {best ? (
-                          <span className="text-xl font-bold text-[var(--color-accent)]">{Math.round(best.e1rm)} lbs</span>
+                          <span className="text-xl font-bold text-[var(--color-accent)]">{displayRound(best.e1rm, units)} {units}</span>
                         ) : (
                           <span className="text-xl text-[#8e8e93]">--</span>
                         )}
@@ -105,10 +107,10 @@ export default function PRsView() {
                     <div key={lift} className="flex items-center gap-3 py-2">
                       <div className="flex-1">
                         <div className="text-sm font-medium">{liftDisplayName(lift)}</div>
-                        {best && <div className="text-xs text-[#8e8e93]">{Math.round(best.weight)} lbs x {best.reps} reps</div>}
+                        {best && <div className="text-xs text-[#8e8e93]">{displayRound(best.weight, units)} {units} x {best.reps} reps</div>}
                       </div>
                       {best ? (
-                        <span className="text-sm font-semibold text-[var(--color-accent)]">e1RM: {Math.round(best.e1rm)} lbs</span>
+                        <span className="text-sm font-semibold text-[var(--color-accent)]">e1RM: {displayRound(best.e1rm, units)} {units}</span>
                       ) : (
                         <span className="text-sm text-[#8e8e93]">No data</span>
                       )}
@@ -125,6 +127,9 @@ export default function PRsView() {
 
       {tab === 'wilks' && (
         (() => {
+          const sex = profile?.sex ?? 'male'
+          const recomputeWilks = (e: typeof wilksEntries[number]) =>
+            calculateWilks(e.bodyWeightLbs, e.squatE1RM, e.benchE1RM, e.deadliftE1RM, sex, 'lbs') ?? e.wilksScore
           const sorted = [...wilksEntries].sort((a, b) => b.date.localeCompare(a.date))
           const latest = sorted[0]
           if (!latest) {
@@ -135,15 +140,15 @@ export default function PRsView() {
               {/* Current score */}
               <div className="bg-[#1c1c1e] rounded-xl p-6 text-center">
                 <div className="text-xs text-[#8e8e93] mb-1">Current Wilks Score</div>
-                <div className="text-5xl font-bold text-[var(--color-accent)] mb-3">{formatWilks(latest.wilksScore)}</div>
+                <div className="text-5xl font-bold text-[var(--color-accent)] mb-3">{formatWilks(recomputeWilks(latest))}</div>
                 <div className="flex justify-center gap-6 mb-3">
                   <div className="text-center">
                     <div className="text-[10px] text-[#8e8e93]">Body Weight</div>
-                    <div className="text-sm font-medium">{Math.round(latest.bodyWeightLbs)} lbs</div>
+                    <div className="text-sm font-medium">{displayRound(latest.bodyWeightLbs, units)} {units}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-[#8e8e93]">Total</div>
-                    <div className="text-sm font-medium">{Math.round(latest.total)} lbs</div>
+                    <div className="text-sm font-medium">{displayRound(latest.total, units)} {units}</div>
                   </div>
                 </div>
                 <div className="flex justify-center gap-3">
@@ -154,7 +159,7 @@ export default function PRsView() {
                   ].map((c) => (
                     <div key={c.label} className="bg-[#38383a] rounded-lg px-3 py-1.5">
                       <div className="text-[10px] font-bold text-[#8e8e93]">{c.label}</div>
-                      <div className="text-xs font-medium">{Math.round(c.value)}</div>
+                      <div className="text-xs font-medium">{displayRound(c.value, units)}</div>
                     </div>
                   ))}
                 </div>
@@ -170,12 +175,12 @@ export default function PRsView() {
                     {sorted.slice(0, 20).map((e) => (
                       <div key={e.id} className="flex items-center justify-between py-2">
                         <div>
-                          <div className="text-sm font-medium tabular-nums">{formatWilks(e.wilksScore)}</div>
+                          <div className="text-sm font-medium tabular-nums">{formatWilks(recomputeWilks(e))}</div>
                           <div className="text-xs text-[#8e8e93]">{new Date(e.date).toLocaleDateString()}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm">{Math.round(e.total)} lbs total</div>
-                          <div className="text-xs text-[#8e8e93]">{Math.round(e.bodyWeightLbs)} lbs BW</div>
+                          <div className="text-sm">{displayRound(e.total, units)} {units} total</div>
+                          <div className="text-xs text-[#8e8e93]">{displayRound(e.bodyWeightLbs, units)} {units} BW</div>
                         </div>
                       </div>
                     ))}

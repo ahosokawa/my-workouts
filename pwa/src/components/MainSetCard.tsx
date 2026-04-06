@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
-import type { PrescribedSet } from '../types'
-import { BARBELL_WEIGHT } from '../logic/plates'
+import type { PrescribedSet, Units } from '../types'
+import { displayRound } from '../types'
+import { barbellWeight } from '../logic/plates'
 import PlateBreakdown from './PlateBreakdown'
 
 interface MainSetCardProps {
@@ -16,32 +17,36 @@ interface MainSetCardProps {
   onWeightChange: (value: string) => void
   onRepsChange: (value: string) => void
   onToggle: () => void
+  units?: Units
 }
 
 export default function MainSetCard({
   set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
-  overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle,
+  overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle, units = 'lbs',
 }: MainSetCardProps) {
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null)
   const weightRef = useRef<HTMLInputElement>(null)
   const repsRef = useRef<HTMLInputElement>(null)
 
+  // Prescribed weight converted from stored lbs to display units
+  const prescribedDisplayWeight = displayRound(set.weight, units)
+
   const displayWeight = (overrideWeight !== undefined && overrideWeight !== '')
-    ? Number(overrideWeight) || set.weight
-    : set.weight
+    ? Number(overrideWeight) || prescribedDisplayWeight
+    : prescribedDisplayWeight
   const displayReps = (overrideReps !== undefined && overrideReps !== '')
     ? Number(overrideReps) || set.targetReps
     : set.targetReps
 
   const prTarget = bestE1RM !== null ? minRepsToBeat(bestE1RM, displayWeight) : null
 
-  const weightInputValue = overrideWeight !== undefined ? overrideWeight : String(set.weight)
+  const weightInputValue = overrideWeight !== undefined ? overrideWeight : String(prescribedDisplayWeight)
   const repsInputValue = overrideReps !== undefined ? overrideReps : String(set.targetReps)
 
   function startEditWeight(e: React.MouseEvent) {
     e.stopPropagation()
     if (!isActive || isCompleted) return
-    if (overrideWeight === undefined) onWeightChange(String(set.weight))
+    if (overrideWeight === undefined) onWeightChange(String(prescribedDisplayWeight))
     setEditingField('weight')
     setTimeout(() => weightRef.current?.select(), 0)
   }
@@ -54,7 +59,7 @@ export default function MainSetCard({
     setTimeout(() => repsRef.current?.select(), 0)
   }
 
-  const isWeightEdited = overrideWeight !== undefined && overrideWeight !== '' && Number(overrideWeight) !== set.weight
+  const isWeightEdited = overrideWeight !== undefined && overrideWeight !== '' && Number(overrideWeight) !== prescribedDisplayWeight
   const isRepsEdited = overrideReps !== undefined && overrideReps !== '' && Number(overrideReps) !== set.targetReps
 
   return (
@@ -90,17 +95,17 @@ export default function MainSetCard({
                 autoFocus
                 className="w-20 text-base font-semibold py-0.5 px-1"
               />
-              <span className="text-sm text-[#8e8e93]">lbs</span>
+              <span className="text-sm text-[#8e8e93]">{units}</span>
             </div>
           ) : (
             <div
               className={`font-semibold text-base ${isActive && !isCompleted ? 'underline decoration-dotted decoration-[#48484a] underline-offset-2' : ''} ${isWeightEdited ? 'text-[var(--color-orange)]' : ''}`}
               onClick={startEditWeight}
             >
-              {displayWeight > 0 ? `${displayWeight} lbs` : 'Bar'}
+              {displayWeight > 0 ? `${displayWeight} ${units}` : 'Bar'}
             </div>
           )}
-          {displayWeight > BARBELL_WEIGHT && <PlateBreakdown weight={displayWeight} />}
+          {displayWeight > barbellWeight(units) && <PlateBreakdown weight={displayWeight} units={units} />}
         </div>
 
         {/* Reps display: tap to edit */}
@@ -152,7 +157,7 @@ export default function MainSetCard({
 
             {prTarget !== null && (
               <span className="text-xs text-[#8e8e93] ml-2">
-                {prTarget}+ to beat PR ({Math.round(bestE1RM!)} lbs)
+                {prTarget}+ to beat PR ({Math.round(bestE1RM!)} {units})
               </span>
             )}
           </div>

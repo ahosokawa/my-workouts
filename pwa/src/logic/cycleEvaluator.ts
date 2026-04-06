@@ -1,5 +1,5 @@
 import type { WorkoutSession, SetLog, UserProfile } from '../types'
-import { MainLift, MAIN_LIFTS, liftProgressionAmount } from '../types'
+import { MainLift, MAIN_LIFTS, liftProgressionAmount, toStorageLbs } from '../types'
 import { amrapMinimum } from './calculator'
 
 // ============================================================
@@ -111,11 +111,13 @@ export function suggestedTMs(
     [MainLift.ShoulderPress]: profile.pressTM,
   }
 
+  const units = profile.units ?? 'lbs'
   for (const lift of MAIN_LIFTS) {
     const currentTM = tmMap[lift]
     const result = cycleResult.liftResults[lift]
     if (result && result.amrapMet) {
-      suggested[lift] = currentTM + liftProgressionAmount(lift)
+      // Progression is in user's unit system; convert to lbs for storage
+      suggested[lift] = currentTM + toStorageLbs(liftProgressionAmount(lift, units), units)
     } else {
       suggested[lift] = currentTM
     }

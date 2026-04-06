@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { MAIN_LIFTS, ProgramVariant, PhaseType } from '../types'
-import type { AccessoryExercise } from '../types'
+import { MAIN_LIFTS, ProgramVariant, PhaseType, toStorageLbs } from '../types'
+import type { AccessoryExercise, Units } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import AccessoryEditor from '../components/AccessoryEditor'
@@ -19,6 +19,11 @@ export default function OnboardingView() {
   const [deadlift, setDeadlift] = useState('')
   const [press, setPress] = useState('')
   const [bodyWeight, setBodyWeight] = useState('')
+
+  // Step 1 state
+  const [units, setUnits] = useState<Units>('lbs')
+  const [tmPercentage, setTmPercentage] = useState<85 | 90>(90)
+  const [sex, setSex] = useState<'male' | 'female'>('male')
 
   // Step 2 state — variant selection
   const [selectedVariant, setSelectedVariant] = useState<ProgramVariant>(ProgramVariant.BBB)
@@ -41,10 +46,10 @@ export default function OnboardingView() {
   }
 
   function handleStart() {
-    createProfile(values[0], values[1], values[2], values[3], selectedVariant)
+    createProfile(values[0], values[1], values[2], values[3], selectedVariant, tmPercentage, sex, units)
     const bw = Number(bodyWeight)
     if (bw > 0) {
-      updateProfile({ bodyWeightLbs: bw, bodyWeightLastUpdated: new Date().toISOString() })
+      updateProfile({ bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() })
     }
     setCustomAccessories(dayAccessories)
   }
@@ -176,11 +181,31 @@ export default function OnboardingView() {
           </p>
         </div>
 
+        {/* Units Toggle */}
+        <div className="mb-6">
+          <label className="block text-sm text-[#8e8e93] mb-2">Units</label>
+          <div className="flex gap-2">
+            {(['lbs', 'kg'] as const).map((u) => (
+              <button
+                key={u}
+                onClick={() => setUnits(u)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  units === u
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#2c2c2e] text-[#8e8e93]'
+                }`}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* 1RM Inputs */}
         <div className="space-y-4 mb-6">
           {fields.map((f) => (
             <div key={f.label}>
-              <label className="block text-sm text-[#8e8e93] mb-1">{f.label} 1RM (lbs)</label>
+              <label className="block text-sm text-[#8e8e93] mb-1">{f.label} 1RM ({units})</label>
               <input
                 type="number"
                 inputMode="numeric"
@@ -193,9 +218,9 @@ export default function OnboardingView() {
           ))}
         </div>
 
-        {/* Body Weight */}
+        {/* Body Weight & Sex (for Wilks) */}
         <div className="mb-6">
-          <label className="block text-sm text-[#8e8e93] mb-1">Body Weight (lbs)</label>
+          <label className="block text-sm text-[#8e8e93] mb-1">Body Weight ({units})</label>
           <input
             type="number"
             inputMode="decimal"
@@ -205,17 +230,55 @@ export default function OnboardingView() {
             className="w-full"
           />
         </div>
+        <div className="mb-6">
+          <label className="block text-sm text-[#8e8e93] mb-2">Sex (for Wilks score)</label>
+          <div className="flex gap-2">
+            {(['male', 'female'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSex(s)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  sex === s
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#2c2c2e] text-[#8e8e93]'
+                }`}
+              >
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* TM Percentage */}
+        <div className="mb-6">
+          <label className="block text-sm text-[#8e8e93] mb-2">Training Max Percentage</label>
+          <div className="flex gap-2">
+            {([85, 90] as const).map((pct) => (
+              <button
+                key={pct}
+                onClick={() => setTmPercentage(pct)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  tmPercentage === pct
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#2c2c2e] text-[#8e8e93]'
+                }`}
+              >
+                {pct}%{pct === 85 ? ' (beginner)' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* TM Preview */}
         {allValid && (
           <div className="bg-[#1c1c1e] rounded-xl p-4 mb-6">
-            <h3 className="text-xs text-[#8e8e93] uppercase tracking-wider mb-3">Training Maxes (90%)</h3>
+            <h3 className="text-xs text-[#8e8e93] uppercase tracking-wider mb-3">Training Maxes ({tmPercentage}%)</h3>
             <div className="grid grid-cols-2 gap-3">
               {fields.map((f, i) => (
                 <div key={f.label} className="text-center">
                   <div className="text-xs text-[#8e8e93]">{f.label}</div>
                   <div className="text-lg font-bold text-[var(--color-accent)]">
-                    {roundWeight(values[i] * 0.9)} lbs
+                    {roundWeight(values[i] * tmPercentage / 100, units)} {units}
                   </div>
                 </div>
               ))}

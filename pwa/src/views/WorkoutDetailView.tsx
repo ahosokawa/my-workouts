@@ -1,15 +1,17 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
-import { liftDisplayName, liftFromDay } from '../types'
-import { BARBELL_WEIGHT } from '../logic/plates'
+import { liftDisplayName, liftFromDay, displayRound } from '../types'
+import { barbellWeight } from '../logic/plates'
 import { getVariantConfig } from '../logic/variants'
 import PlateBreakdown from '../components/PlateBreakdown'
 
 export default function WorkoutDetailView() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const profile = useStore((s) => s.profile)
   const sessions = useStore((s) => s.sessions)
   const allLogs = useStore((s) => s.setLogs)
   const navigate = useNavigate()
+  const units = profile?.units ?? 'lbs'
 
   const session = sessions.find((s) => s.id === sessionId)
   if (!session) {
@@ -65,21 +67,24 @@ export default function WorkoutDetailView() {
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">{lift ? liftDisplayName(lift) : 'Main Lift'}</h2>
         </div>
         <div className="px-4 pb-3 divide-y divide-[#38383a]">
-          {mainLogs.map((log) => (
-            <div key={log.id} className={`flex items-center gap-3 py-2 ${!log.isCompleted ? 'opacity-40' : ''}`}>
-              <span className={`text-lg ${log.isCompleted ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
-                {log.isCompleted ? '✓' : '○'}
-              </span>
-              <div className="flex-1">
-                <div className="text-sm font-medium">{log.weight > 0 ? `${log.weight} lbs` : 'Bar'}</div>
-                {log.weight > BARBELL_WEIGHT && <PlateBreakdown weight={log.weight} />}
+          {mainLogs.map((log) => {
+            const w = displayRound(log.weight, units)
+            return (
+              <div key={log.id} className={`flex items-center gap-3 py-2 ${!log.isCompleted ? 'opacity-40' : ''}`}>
+                <span className={`text-lg ${log.isCompleted ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
+                  {log.isCompleted ? '✓' : '○'}
+                </span>
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{w > 0 ? `${w} ${units}` : 'Bar'}</div>
+                  {w > barbellWeight(units) && <PlateBreakdown weight={w} units={units} />}
+                </div>
+                <span className={`text-sm ${log.isAMRAP && log.isCompleted ? 'font-bold text-[var(--color-green)]' : 'text-[#8e8e93]'}`}>
+                  {log.isAMRAP && log.actualReps != null ? `${log.actualReps} reps` : `${log.targetReps} reps`}
+                  {log.isAMRAP && ' (AMRAP)'}
+                </span>
               </div>
-              <span className={`text-sm ${log.isAMRAP && log.isCompleted ? 'font-bold text-[var(--color-green)]' : 'text-[#8e8e93]'}`}>
-                {log.isAMRAP && log.actualReps != null ? `${log.actualReps} reps` : `${log.targetReps} reps`}
-                {log.isAMRAP && ' (AMRAP)'}
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -97,7 +102,7 @@ export default function WorkoutDetailView() {
                 </span>
                 <span className="text-sm">Set {log.setIndex + 1}</span>
                 <div className="flex-1" />
-                {log.weight > 0 && <span className="text-sm text-[#8e8e93]">{Math.round(log.weight)} lbs</span>}
+                {log.weight > 0 && <span className="text-sm text-[#8e8e93]">{displayRound(log.weight, units)} {units}</span>}
                 <span className="text-sm">{log.targetReps} reps</span>
               </div>
             ))}

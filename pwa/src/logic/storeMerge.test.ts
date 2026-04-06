@@ -21,6 +21,12 @@ const EXISTING_PROFILE: UserProfile = {
   currentVariant: 'fsl',
   leaderCycleCount: 1,
   anchorCycleCount: 0,
+  tmPercentage: 90,
+  sex: 'male',
+  units: 'lbs',
+  isDeloading: false,
+  deloadType: null,
+  deloadDay: 1,
   bodyWeightLbs: 180,
   bodyWeightLastUpdated: '2026-01-01T00:00:00.000Z',
   createdAt: '2025-12-01T00:00:00.000Z',
@@ -168,6 +174,54 @@ describe('mergePersistedState — accessory migration', () => {
 
     // Migration flag prevents re-population; falls through to the undefined→null default
     expect(result.customAccessories).toBeNull()
+  })
+})
+
+describe('mergePersistedState — tmPercentage migration', () => {
+  it('defaults tmPercentage to 90 for existing user without it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { tmPercentage: _, ...profileWithoutTmPct } = EXISTING_PROFILE
+    const persisted = {
+      profile: profileWithoutTmPct,
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.tmPercentage).toBe(90)
+  })
+
+  it('preserves existing tmPercentage', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, tmPercentage: 85 as const },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.tmPercentage).toBe(85)
+  })
+})
+
+describe('mergePersistedState — sex migration', () => {
+  it('defaults sex to male for existing user without it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { sex: __, ...profileWithoutSex } = EXISTING_PROFILE
+    const persisted = {
+      profile: profileWithoutSex,
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.sex).toBe('male')
+  })
+
+  it('preserves existing sex setting', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, sex: 'female' as const },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.sex).toBe('female')
   })
 })
 

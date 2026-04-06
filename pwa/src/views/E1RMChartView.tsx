@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useStore } from '../store'
-import { MainLift, liftDisplayName } from '../types'
+import { MainLift, liftDisplayName, displayRound } from '../types'
 import { estimated1RM } from '../logic/brzycki'
 
 type Interval = 'week' | 'month'
@@ -10,8 +10,10 @@ type Interval = 'week' | 'month'
 export default function E1RMChartView() {
   const { liftId } = useParams<{ liftId: string }>()
   const navigate = useNavigate()
+  const profile = useStore((s) => s.profile)
   const setLogs = useStore((s) => s.setLogs)
   const [interval, setInterval] = useState<Interval>('month')
+  const units = profile?.units ?? 'lbs'
 
   const lift = Number(liftId) as MainLift
   const liftName = liftDisplayName(lift)
@@ -55,7 +57,7 @@ export default function E1RMChartView() {
   }
 
   const dataPoints = Object.entries(buckets)
-    .map(([date, e1rm]) => ({ date, e1rm: Math.round(e1rm) }))
+    .map(([date, e1rm]) => ({ date, e1rm: displayRound(e1rm, units) }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
   return (
@@ -70,7 +72,7 @@ export default function E1RMChartView() {
       {bestE1RM > 0 && (
         <div className="text-center py-2">
           <div className="text-xs text-[#8e8e93]">Best Est. 1RM</div>
-          <div className="text-4xl font-bold text-[var(--color-accent)]">{Math.round(bestE1RM)} lbs</div>
+          <div className="text-4xl font-bold text-[var(--color-accent)]">{displayRound(bestE1RM, units)} {units}</div>
         </div>
       )}
 
@@ -106,12 +108,12 @@ export default function E1RMChartView() {
               <YAxis
                 tick={{ fontSize: 10, fill: '#8e8e93' }}
                 domain={['auto', 'auto']}
-                label={{ value: 'lbs', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#8e8e93' } }}
+                label={{ value: units, angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: '#8e8e93' } }}
               />
               <Tooltip
                 contentStyle={{ backgroundColor: '#2c2c2e', border: 'none', borderRadius: 8, fontSize: 12 }}
                 labelFormatter={(v) => new Date(String(v)).toLocaleDateString()}
-                formatter={(v) => [`${v} lbs`, 'Est. 1RM']}
+                formatter={(v) => [`${v} ${units}`, 'Est. 1RM']}
               />
               <Line type="monotone" dataKey="e1rm" stroke="#007AFF" strokeWidth={2} dot={{ fill: '#007AFF', r: 4 }} />
             </LineChart>
@@ -119,7 +121,7 @@ export default function E1RMChartView() {
         </div>
       ) : dataPoints.length === 1 ? (
         <div className="bg-[#1c1c1e] rounded-xl p-6 text-center">
-          <div className="text-2xl font-bold">{dataPoints[0].e1rm} lbs</div>
+          <div className="text-2xl font-bold">{dataPoints[0].e1rm} {units}</div>
           <div className="text-sm text-[#8e8e93] mt-1">{new Date(dataPoints[0].date).toLocaleDateString()}</div>
           <div className="text-xs text-[#8e8e93] mt-2">Complete more workouts to see a trend line.</div>
         </div>
