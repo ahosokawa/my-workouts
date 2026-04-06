@@ -17,7 +17,7 @@ export default function App() {
   // No profile yet -> onboarding
   if (!profile) {
     return (
-      <div className="h-full overflow-y-auto pt-safe">
+      <div className="min-h-full pt-safe">
         <Routes>
           <Route path="*" element={<OnboardingView />} />
         </Routes>
