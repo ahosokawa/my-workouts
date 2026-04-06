@@ -64,7 +64,7 @@ export default function OnboardingView() {
   // ---- Step 3: Accessory Review ----
   if (step === 3) {
     return (
-      <div className="min-h-full flex flex-col p-6">
+      <div className="min-h-full flex flex-col overflow-y-auto p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold mb-2">Review Accessories</h1>
           <p className="text-sm text-[#8e8e93]">
@@ -97,7 +97,7 @@ export default function OnboardingView() {
   // ---- Step 2: Program Variant Selection ----
   if (step === 2) {
     return (
-      <div className="min-h-full flex flex-col p-6">
+      <div className="min-h-full flex flex-col overflow-y-auto p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold mb-2">Choose Your Program</h1>
           <p className="text-sm text-[#8e8e93]">
@@ -171,8 +171,8 @@ export default function OnboardingView() {
 
   // ---- Step 1: Enter 1RMs ----
   return (
-    <div className="min-h-full flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
+    <div className="min-h-full flex flex-col items-center overflow-y-auto p-6">
+      <div className="w-full max-w-sm my-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold mb-2">My Workouts</h1>
