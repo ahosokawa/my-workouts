@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { syncOnce, type SyncableStore } from './syncManager'
 
 type State = ReturnType<SyncableStore['getState']>
@@ -57,8 +57,13 @@ function makeStore(overrides: Partial<State> = {}): {
 
 beforeEach(() => {
   globalThis.fetch = vi.fn() as unknown as typeof fetch
-  // jsdom sets navigator.onLine to true by default
-  Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+  // Stub navigator so tests work in Node with or without jsdom (Node 21+ makes
+  // navigator a getter-only global, so plain assignment would fail).
+  vi.stubGlobal('navigator', { onLine: true })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('syncOnce', () => {
@@ -120,7 +125,7 @@ describe('syncOnce', () => {
   })
 
   it('records a network error when offline and does not call fetch', async () => {
-    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+    vi.stubGlobal('navigator', { onLine: false })
     const { store, setCloudSyncStatus } = makeStore()
     await syncOnce(store)
     expect(globalThis.fetch).not.toHaveBeenCalled()
