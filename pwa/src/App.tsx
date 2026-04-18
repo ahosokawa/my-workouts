@@ -25,17 +25,6 @@ export default function App() {
     )
   }
 
-  // Deload week in progress
-  if (profile.isDeloading) {
-    return (
-      <div className="absolute inset-0 overflow-y-auto pt-safe" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <Routes>
-          <Route path="*" element={<DeloadWorkoutView />} />
-        </Routes>
-      </div>
-    )
-  }
-
   // Cycle complete -> cycle completion flow
   if (profile.isCycleComplete) {
     return (
@@ -47,13 +36,13 @@ export default function App() {
     )
   }
 
-  // Normal app with tabs
+  // Normal app with tabs (DeloadWorkoutView replaces WorkoutView during deload week)
   return (
     <div className="absolute inset-0 flex flex-col">
       <div className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
-          <Route path="/workout" element={<WorkoutView />} />
+          <Route path="/workout" element={profile.isDeloading ? <DeloadWorkoutView /> : <WorkoutView />} />
           <Route path="/history" element={<HistoryView />} />
           <Route path="/history/:sessionId" element={<WorkoutDetailView />} />
           <Route path="/prs" element={<PRsView />} />
