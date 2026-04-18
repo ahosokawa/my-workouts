@@ -3,6 +3,8 @@ import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { requestNotificationPermission } from '../notifications'
+import { verifyToken, errorMessage } from '../logic/gistSync'
+import { syncOnce } from '../logic/syncManager'
 
 export default function SettingsView() {
   const profile = useStore((s) => s.profile)
@@ -15,6 +17,8 @@ export default function SettingsView() {
   const restNotifyMinutes = useStore((s) => s.restNotifyMinutes)
   const setRestNotifyEnabled = useStore((s) => s.setRestNotifyEnabled)
   const setRestNotifyMinutes = useStore((s) => s.setRestNotifyMinutes)
+  const cloudSync = useStore((s) => s.cloudSync)
+  const setCloudSync = useStore((s) => s.setCloudSync)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
@@ -24,6 +28,12 @@ export default function SettingsView() {
   const [showImportAlert, setShowImportAlert] = useState(false)
   const [importJson, setImportJson] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [showCloudSetup, setShowCloudSetup] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [setupError, setSetupError] = useState<string | null>(null)
+  const [syncingNow, setSyncingNow] = useState(false)
+  const [showDisableSync, setShowDisableSync] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -101,6 +111,69 @@ export default function SettingsView() {
   const liftDay = (day: number) => {
     const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Overhead Press' }
     return names[day] ?? 'Unknown'
+  }
+
+  async function handleShareBackup() {
+    const json = exportData()
+    const filename = `my-workouts-backup-${new Date().toISOString().slice(0, 10)}.json`
+    const file = new File([json], filename, { type: 'application/json' })
+    const shareData = { files: [file], title: 'My Workouts Backup' }
+    if (typeof navigator.canShare === 'function' && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData)
+        return
+      } catch {
+        // User cancelled or share failed — fall through to download fallback
+      }
+    }
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleEnableSync() {
+    const token = tokenInput.trim()
+    if (!token) {
+      setSetupError('Paste a GitHub token.')
+      return
+    }
+    setVerifying(true)
+    setSetupError(null)
+    const result = await verifyToken(token)
+    setVerifying(false)
+    if (!result.ok) {
+      setSetupError(errorMessage(result.error))
+      return
+    }
+    setCloudSync({
+      enabled: true,
+      token,
+      gistId: null,
+      lastSyncAt: null,
+      lastError: null,
+    })
+    setTokenInput('')
+    setShowCloudSetup(false)
+    // Kick off the first sync immediately rather than waiting for the debounce.
+    void syncOnce(useStore)
+  }
+
+  async function handleSyncNow() {
+    setSyncingNow(true)
+    try {
+      await syncOnce(useStore)
+    } finally {
+      setSyncingNow(false)
+    }
+  }
+
+  function handleDisableSync() {
+    setCloudSync(null)
+    setShowDisableSync(false)
   }
 
   return (
@@ -293,6 +366,12 @@ export default function SettingsView() {
       {/* Data Backup */}
       <Section title="Data Backup">
         <button
+          onClick={handleShareBackup}
+          className="w-full text-left py-2 text-sm text-[var(--color-accent)]"
+        >
+          Share Backup
+        </button>
+        <button
           onClick={() => {
             const json = exportData()
             const blob = new Blob([json], { type: 'application/json' })
@@ -338,6 +417,99 @@ export default function SettingsView() {
         )}
       </Section>
 
+      {/* Cloud Backup (GitHub Gist) */}
+      <Section title="Cloud Backup (GitHub Gist)">
+        {!cloudSync?.enabled && !showCloudSetup && (
+          <>
+            <button
+              onClick={() => { setShowCloudSetup(true); setSetupError(null) }}
+              className="w-full text-left py-2 text-sm text-[var(--color-accent)]"
+            >
+              Enable GitHub Gist Sync
+            </button>
+            <div className="py-2 text-xs text-[#8e8e93]">
+              Auto-saves a private backup to your GitHub account whenever your data changes.
+            </div>
+          </>
+        )}
+
+        {!cloudSync?.enabled && showCloudSetup && (
+          <div className="py-2 space-y-3">
+            <div className="text-xs text-[#8e8e93]">
+              Create a <span className="text-white">classic</span> token with <span className="text-white">gist</span> scope only:{' '}
+              <a
+                href="https://github.com/settings/tokens/new?scopes=gist&description=my-workouts%20backup"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--color-accent)] underline"
+              >
+                github.com/settings/tokens/new
+              </a>
+              . Paste it below.
+            </div>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="ghp_…"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              className="w-full text-sm"
+            />
+            {setupError && (
+              <div className="text-xs text-[var(--color-red)]">{setupError}</div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowCloudSetup(false); setTokenInput(''); setSetupError(null) }}
+                disabled={verifying}
+                className="flex-1 py-2 rounded-lg bg-[#38383a] text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEnableSync}
+                disabled={verifying || !tokenInput.trim()}
+                className="flex-1 py-2 rounded-lg bg-[var(--color-accent)] text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {verifying ? 'Verifying…' : 'Verify & Enable'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cloudSync?.enabled && (
+          <>
+            <Row
+              label="Status"
+              value={
+                cloudSync.lastError
+                  ? 'Error'
+                  : cloudSync.lastSyncAt
+                    ? `Synced ${formatRelative(cloudSync.lastSyncAt)}`
+                    : 'Not synced yet'
+              }
+            />
+            {cloudSync.lastError && (
+              <div className="py-2 text-xs text-[var(--color-red)]">{cloudSync.lastError}</div>
+            )}
+            <button
+              onClick={handleSyncNow}
+              disabled={syncingNow}
+              className="w-full text-left py-2 text-sm text-[var(--color-accent)] disabled:opacity-50"
+            >
+              {syncingNow ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button
+              onClick={() => setShowDisableSync(true)}
+              className="w-full text-left py-2 text-sm text-[var(--color-red)]"
+            >
+              Disable sync
+            </button>
+          </>
+        )}
+      </Section>
+
       {/* Actions */}
       <Section title="Actions">
         <button onClick={() => setShowResetCycle(true)} className="w-full text-left py-2 text-sm text-[var(--color-orange)]">
@@ -366,6 +538,16 @@ export default function SettingsView() {
           onConfirm={handleResetAll}
           onCancel={() => setShowResetAll(false)}
           confirmLabel="Reset Everything"
+          destructive
+        />
+      )}
+      {showDisableSync && (
+        <Alert
+          title="Disable Cloud Sync?"
+          message="The existing gist on GitHub won't be deleted, but your token will be removed from this device and auto-sync will stop."
+          onConfirm={handleDisableSync}
+          onCancel={() => setShowDisableSync(false)}
+          confirmLabel="Disable"
           destructive
         />
       )}
@@ -407,6 +589,21 @@ function Section({ title, trailing, children }: { title: string; trailing?: Reac
       <div className="px-4 pb-3 divide-y divide-[#38383a]">{children}</div>
     </div>
   )
+}
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diff = Date.now() - then
+  if (Number.isNaN(then) || diff < 0) return 'just now'
+  const sec = Math.round(diff / 1000)
+  if (sec < 60) return 'just now'
+  const min = Math.round(sec / 60)
+  if (min < 60) return `${min} min ago`
+  const hr = Math.round(min / 60)
+  if (hr < 24) return `${hr} hr ago`
+  const day = Math.round(hr / 24)
+  if (day < 7) return `${day} d ago`
+  return new Date(iso).toLocaleDateString()
 }
 
 function Row({ label, value }: { label: string; value: string }) {

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig } from './types'
 import { liftFromDay, MAIN_LIFTS, PhaseType, toStorageLbs, toDisplayWeight } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
@@ -70,6 +70,7 @@ interface AppState {
   savedExercises: AccessoryExercise[]  // user's exercise library for re-use
   restNotifyEnabled: boolean
   restNotifyMinutes: number
+  cloudSync: CloudSyncConfig | null
 
   // Profile actions
   createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant, tmPercentage?: 85 | 90, sex?: 'male' | 'female', units?: Units) => void
@@ -95,6 +96,10 @@ interface AppState {
   // Notification actions
   setRestNotifyEnabled: (enabled: boolean) => void
   setRestNotifyMinutes: (minutes: number) => void
+
+  // Cloud sync actions
+  setCloudSync: (config: CloudSyncConfig | null) => void
+  setCloudSyncStatus: (partial: Partial<Pick<CloudSyncConfig, 'gistId' | 'lastSyncAt' | 'lastError'>>) => void
 
   // Data management
   resetAll: () => void
@@ -130,6 +135,7 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
   if (!Array.isArray(state.savedExercises)) state.savedExercises = []
   if (state.restNotifyEnabled === undefined) state.restNotifyEnabled = true
   if (state.restNotifyMinutes === undefined) state.restNotifyMinutes = 3
+  if (state.cloudSync === undefined) state.cloudSync = null
   // Ensure new profile fields have defaults (variant support)
   if (state.profile) {
     const updates: Partial<UserProfile> = {}
@@ -165,6 +171,7 @@ export const useStore = create<AppState>()(
       savedExercises: [],
       restNotifyEnabled: true,
       restNotifyMinutes: 3,
+      cloudSync: null,
 
       createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units) => {
         const pct = (tmPercentage ?? 90) / 100
@@ -389,11 +396,20 @@ export const useStore = create<AppState>()(
         })
       },
 
+      setCloudSync: (config) => set({ cloudSync: config }),
+
+      setCloudSyncStatus: (partial) => {
+        const { cloudSync } = get()
+        if (!cloudSync) return
+        set({ cloudSync: { ...cloudSync, ...partial } })
+      },
+
       resetAll: () => {
-        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, savedExercises: [] })
+        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, savedExercises: [], cloudSync: null })
       },
 
       exportData: () => {
+        // NOTE: cloudSync is intentionally excluded — it contains a GitHub PAT
         const { profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises } = get()
         return JSON.stringify(
           { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises },
@@ -411,6 +427,7 @@ export const useStore = create<AppState>()(
           throw new Error('Invalid backup file')
         }
         if (data.version !== 1) throw new Error('Unsupported backup version')
+        // Any cloudSync key in the backup is ignored; current sync config is preserved.
         set({
           profile: data.profile,
           sessions: data.sessions ?? [],

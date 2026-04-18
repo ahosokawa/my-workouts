@@ -210,3 +210,15 @@ export interface AccessoryExercise {
   reps: number
   weightType: AccessoryWeightType
 }
+
+// ============================================================
+// Cloud Sync (GitHub Gist)
+// ============================================================
+
+export interface CloudSyncConfig {
+  enabled: boolean
+  token: string          // GitHub classic PAT, gist scope only
+  gistId: string | null  // null until first successful sync
+  lastSyncAt: string | null  // ISO date of last successful sync
+  lastError: string | null   // human-readable error from last attempt
+}

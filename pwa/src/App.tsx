@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store'
+import { startSyncManager } from './logic/syncManager'
 import TabBar from './components/TabBar'
 import OnboardingView from './views/OnboardingView'
 import CycleCompletionView from './views/CycleCompletionView'
@@ -13,6 +15,11 @@ import DeloadWorkoutView from './views/DeloadWorkoutView'
 
 export default function App() {
   const profile = useStore((s) => s.profile)
+
+  useEffect(() => {
+    const handle = startSyncManager(useStore)
+    return handle.stop
+  }, [])
 
   // No profile yet -> onboarding
   if (!profile) {
