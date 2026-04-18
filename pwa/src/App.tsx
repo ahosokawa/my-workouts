@@ -28,7 +28,7 @@ export default function App() {
   // Deload week in progress
   if (profile.isDeloading) {
     return (
-      <div className="h-full pt-safe">
+      <div className="absolute inset-0 overflow-y-auto pt-safe" style={{ WebkitOverflowScrolling: 'touch' }}>
         <Routes>
           <Route path="*" element={<DeloadWorkoutView />} />
         </Routes>
@@ -39,7 +39,7 @@ export default function App() {
   // Cycle complete -> cycle completion flow
   if (profile.isCycleComplete) {
     return (
-      <div className="h-full pt-safe">
+      <div className="absolute inset-0 overflow-y-auto pt-safe" style={{ WebkitOverflowScrolling: 'touch' }}>
         <Routes>
           <Route path="*" element={<CycleCompletionView />} />
         </Routes>
