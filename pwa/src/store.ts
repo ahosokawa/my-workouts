@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig, SupplementalOverride, ExerciseDef } from './types'
 import { liftFromDay, MAIN_LIFTS, PhaseType, toStorageLbs, toDisplayWeight } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
@@ -67,7 +67,8 @@ interface AppState {
   wilksEntries: WilksEntry[]
   activeWorkout: ActiveWorkout
   customAccessories: Record<number, AccessoryExercise[]> | null  // keyed by MainLift value
-  savedExercises: AccessoryExercise[]  // user's exercise library for re-use
+  customSupplemental: Record<number, SupplementalOverride> | null  // keyed by MainLift; missing key = use main lift
+  savedExercises: ExerciseDef[]  // user's exercise library (identity only — sets/reps are per-use)
   restNotifyEnabled: boolean
   restNotifyMinutes: number
   cloudSync: CloudSyncConfig | null
@@ -91,7 +92,10 @@ interface AppState {
 
   // Accessory actions
   setCustomAccessories: (accessories: Record<number, AccessoryExercise[]>) => void
-  addSavedExercise: (exercise: AccessoryExercise) => void
+  addSavedExercise: (exercise: ExerciseDef) => void
+
+  // Supplemental override actions
+  setCustomSupplemental: (overrides: Record<number, SupplementalOverride> | null) => void
 
   // Notification actions
   setRestNotifyEnabled: (enabled: boolean) => void
@@ -132,7 +136,34 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
     (state as Record<string, unknown>)._migratedAccessories = true
   }
   if (state.customAccessories === undefined) state.customAccessories = null
+  if (state.customSupplemental === undefined) state.customSupplemental = null
   if (!Array.isArray(state.savedExercises)) state.savedExercises = []
+
+  // Normalize the exercise library to context-free ExerciseDef and union in any
+  // exercises currently in use across customAccessories / customSupplemental so
+  // anything the user has ever defined shows up wherever they pick an exercise.
+  {
+    const byName = new Map<string, ExerciseDef>()
+    const add = (ex: { id: string; name: string; weightType: AccessoryExercise['weightType'] } | undefined) => {
+      if (!ex || !ex.name) return
+      const key = ex.name.toLowerCase()
+      if (byName.has(key)) return
+      byName.set(key, { id: ex.id, name: ex.name, weightType: ex.weightType })
+    }
+    for (const ex of state.savedExercises) add(ex)
+    if (state.customAccessories) {
+      for (const k of Object.keys(state.customAccessories)) {
+        for (const ex of state.customAccessories[Number(k)] ?? []) add(ex)
+      }
+    }
+    if (state.customSupplemental) {
+      for (const k of Object.keys(state.customSupplemental)) {
+        const o = state.customSupplemental[Number(k)]
+        if (o) add(o.exercise)
+      }
+    }
+    state.savedExercises = Array.from(byName.values())
+  }
   if (state.restNotifyEnabled === undefined) state.restNotifyEnabled = true
   if (state.restNotifyMinutes === undefined) state.restNotifyMinutes = 3
   if (state.cloudSync === undefined) state.cloudSync = null
@@ -168,6 +199,7 @@ export const useStore = create<AppState>()(
       wilksEntries: [],
       activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
       customAccessories: null,
+      customSupplemental: null,
       savedExercises: [],
       restNotifyEnabled: true,
       restNotifyMinutes: 3,
@@ -382,6 +414,10 @@ export const useStore = create<AppState>()(
         set({ customAccessories: accessories })
       },
 
+      setCustomSupplemental: (overrides) => {
+        set({ customSupplemental: overrides })
+      },
+
       setRestNotifyEnabled: (enabled) => set({ restNotifyEnabled: enabled }),
       setRestNotifyMinutes: (minutes) => set({ restNotifyMinutes: Math.max(1, Math.min(10, minutes)) }),
 
@@ -405,14 +441,14 @@ export const useStore = create<AppState>()(
       },
 
       resetAll: () => {
-        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, savedExercises: [], cloudSync: null })
+        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, customSupplemental: null, savedExercises: [], cloudSync: null })
       },
 
       exportData: () => {
         // NOTE: cloudSync is intentionally excluded — it contains a GitHub PAT
-        const { profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises } = get()
+        const { profile, sessions, setLogs, wilksEntries, customAccessories, customSupplemental, savedExercises } = get()
         return JSON.stringify(
-          { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries, customAccessories, savedExercises },
+          { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries, customAccessories, customSupplemental, savedExercises },
           null,
           2,
         )
@@ -434,6 +470,7 @@ export const useStore = create<AppState>()(
           setLogs: data.setLogs ?? [],
           wilksEntries: data.wilksEntries ?? [],
           customAccessories: data.customAccessories ?? null,
+          customSupplemental: data.customSupplemental ?? null,
           savedExercises: data.savedExercises ?? [],
         })
       },

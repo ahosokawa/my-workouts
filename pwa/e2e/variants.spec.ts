@@ -12,11 +12,12 @@ test.describe('Cycle completion — variant selector', () => {
     // Variant selector section exists
     await expect(page.getByText('Next Cycle Program')).toBeVisible()
 
-    // All 4 variant cards are present
-    await expect(page.getByRole('button', { name: /FSL/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /BBB/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /SSL/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /BBS/ })).toBeVisible()
+    // All 4 variant cards are present (anchored to start to disambiguate from
+    // workout-plan day cards that include the variant short label in their summary)
+    await expect(page.getByRole('button', { name: /^FSL/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^BBB/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^SSL/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^BBS/ })).toBeVisible()
   })
 
   test('suggests "Start with a Leader" for first cycle', async ({ page }) => {
@@ -40,12 +41,12 @@ test.describe('Cycle completion — variant selector', () => {
     await page.goto('/')
 
     // Click BBB
-    await page.getByRole('button', { name: /BBB/ }).click()
+    await page.getByRole('button', { name: /^BBB/ }).click()
     await expect(page.getByText('Boring But Big')).toBeVisible()
     await expect(page.getByText('5×10 at 50% of training max')).toBeVisible()
 
     // Click SSL
-    await page.getByRole('button', { name: /SSL/ }).click()
+    await page.getByRole('button', { name: /^SSL/ }).click()
     await expect(page.getByText('Second Set Last')).toBeVisible()
   })
 
@@ -54,7 +55,7 @@ test.describe('Cycle completion — variant selector', () => {
     await page.goto('/')
 
     // Select BBB, skip deload, and start
-    await page.getByRole('button', { name: /BBB/ }).click()
+    await page.getByRole('button', { name: /^BBB/ }).click()
     await page.getByRole('button', { name: /Skip/ }).click()
     await page.getByRole('button', { name: /Start Cycle 2/ }).click()
 

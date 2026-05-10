@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, DeloadType, displayRound, toStorageLbs } from '../types'
-import type { AccessoryExercise } from '../types'
+import type { AccessoryExercise, SupplementalOverride } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
-import AccessoryEditor from '../components/AccessoryEditor'
+import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function CycleCompletionView() {
   const profile = useStore((s) => s.profile)
@@ -15,6 +15,8 @@ export default function CycleCompletionView() {
   const startDeload = useStore((s) => s.startDeload)
   const customAccessories = useStore((s) => s.customAccessories)
   const setCustomAccessories = useStore((s) => s.setCustomAccessories)
+  const customSupplemental = useStore((s) => s.customSupplemental)
+  const setCustomSupplemental = useStore((s) => s.setCustomSupplemental)
 
   if (!profile) return null
 
@@ -63,6 +65,18 @@ export default function CycleCompletionView() {
     return m
   })
 
+  // Per-day supplemental override state — carry forward from last cycle if any
+  const [daySupplemental, setDaySupplemental] = useState<Record<number, SupplementalOverride>>(() => {
+    if (!customSupplemental) return {}
+    const m: Record<number, SupplementalOverride> = {}
+    for (const k of Object.keys(customSupplemental)) {
+      const lift = Number(k)
+      const existing = customSupplemental[lift]
+      if (existing) m[lift] = { ...existing, exercise: { ...existing.exercise } }
+    }
+    return m
+  })
+
   const [deloadOption, setDeloadOption] = useState<'deload' | 'tm_test' | 'skip'>('deload')
 
   const tmMap: Record<number, number> = {
@@ -88,6 +102,7 @@ export default function CycleCompletionView() {
       ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
     setCustomAccessories(dayAccessories)
+    setCustomSupplemental(Object.keys(daySupplemental).length > 0 ? daySupplemental : null)
   }
 
   function handleStart() {
@@ -280,9 +295,16 @@ export default function CycleCompletionView() {
         </div>
       </div>
 
-      {/* Day-by-Day Accessory Preview / Editor */}
+      {/* Day-by-Day Workout Plan: supplemental override + accessories per day */}
       <div className="mb-4">
-        <AccessoryEditor value={dayAccessories} onChange={setDayAccessories} />
+        <WorkoutPlanEditor
+          accessories={dayAccessories}
+          onAccessoriesChange={setDayAccessories}
+          supplemental={daySupplemental}
+          onSupplementalChange={setDaySupplemental}
+          variantConfig={getVariantConfig(selectedVariant)}
+          units={units}
+        />
       </div>
 
       {/* Deload Week Option */}

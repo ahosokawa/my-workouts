@@ -18,11 +18,13 @@ interface MainSetCardProps {
   onRepsChange: (value: string) => void
   onToggle: () => void
   units?: Units
+  showPlates?: boolean
 }
 
 export default function MainSetCard({
   set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
   overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle, units = 'lbs',
+  showPlates = true,
 }: MainSetCardProps) {
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null)
   const weightRef = useRef<HTMLInputElement>(null)
@@ -105,7 +107,7 @@ export default function MainSetCard({
               {displayWeight > 0 ? `${displayWeight} ${units}` : 'Bar'}
             </div>
           )}
-          {displayWeight > barbellWeight(units) && <PlateBreakdown weight={displayWeight} units={units} />}
+          {showPlates && displayWeight > barbellWeight(units) && <PlateBreakdown weight={displayWeight} units={units} />}
         </div>
 
         {/* Reps display: tap to edit */}

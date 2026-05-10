@@ -10,6 +10,7 @@ export interface SyncableStore {
     setLogs: unknown
     wilksEntries: unknown
     customAccessories: unknown
+    customSupplemental: unknown
     savedExercises: unknown
     cloudSync: {
       enabled: boolean
@@ -108,6 +109,7 @@ type Snapshot = {
   setLogs: unknown
   wilksEntries: unknown
   customAccessories: unknown
+  customSupplemental: unknown
   savedExercises: unknown
 }
 
@@ -118,6 +120,7 @@ function snapshot(state: ReturnType<SyncableStore['getState']>): Snapshot {
     setLogs: state.setLogs,
     wilksEntries: state.wilksEntries,
     customAccessories: state.customAccessories,
+    customSupplemental: state.customSupplemental,
     savedExercises: state.savedExercises,
   }
 }
@@ -129,6 +132,7 @@ function changed(a: Snapshot, b: Snapshot): boolean {
     a.setLogs !== b.setLogs ||
     a.wilksEntries !== b.wilksEntries ||
     a.customAccessories !== b.customAccessories ||
+    a.customSupplemental !== b.customSupplemental ||
     a.savedExercises !== b.savedExercises
   )
 }

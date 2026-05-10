@@ -51,8 +51,8 @@ test.describe('Onboarding flow', () => {
     await expect(page.getByText('Choose Your Program')).toBeVisible()
     await page.getByRole('button', { name: 'Continue' }).click()
 
-    // Step 3: accessories review
-    await expect(page.getByText('Review Accessories')).toBeVisible()
+    // Step 3: workout plan review
+    await expect(page.getByText('Review Workout Plan')).toBeVisible()
     await page.getByRole('button', { name: 'Start Training' }).click()
 
     // Should land on workout view

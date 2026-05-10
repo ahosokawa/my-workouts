@@ -200,15 +200,28 @@ export interface PrescribedSet {
 }
 
 // ============================================================
-// Accessory Exercise Definition
+// Exercise Definition (reusable)
 // ============================================================
 
-export interface AccessoryExercise {
+/** Identity of an exercise — name and how it's weighted.
+ *  Reusable wherever we need to refer to an exercise (accessories, supplemental swaps, etc.). */
+export interface ExerciseDef {
   id: string
   name: string
+  weightType: AccessoryWeightType
+}
+
+/** Accessory-specific exercise: an ExerciseDef plus sets/reps prescription. */
+export interface AccessoryExercise extends ExerciseDef {
   sets: number
   reps: number
-  weightType: AccessoryWeightType
+}
+
+/** Per-day override that swaps the supplemental lift for a different exercise.
+ *  The variant's sets/reps/percentage still apply, but to a different exercise + TM. */
+export interface SupplementalOverride {
+  exercise: ExerciseDef
+  trainingMaxLbs: number  // basis for the variant percentage; user-entered, stored in lbs
 }
 
 // ============================================================

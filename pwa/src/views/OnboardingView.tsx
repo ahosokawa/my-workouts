@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { MAIN_LIFTS, ProgramVariant, PhaseType, toStorageLbs } from '../types'
-import type { AccessoryExercise, Units } from '../types'
+import type { AccessoryExercise, SupplementalOverride, Units } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import AccessoryEditor from '../components/AccessoryEditor'
+import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function OnboardingView() {
   const createProfile = useStore((s) => s.createProfile)
   const updateProfile = useStore((s) => s.updateProfile)
   const setCustomAccessories = useStore((s) => s.setCustomAccessories)
+  const setCustomSupplemental = useStore((s) => s.setCustomSupplemental)
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
 
@@ -37,6 +38,9 @@ export default function OnboardingView() {
     return m
   })
 
+  // Step 3 state — supplemental overrides (empty by default)
+  const [daySupplemental, setDaySupplemental] = useState<Record<number, SupplementalOverride>>({})
+
   const values = [squat, bench, deadlift, press].map(Number)
   const allValid = values.every((v) => v > 0)
 
@@ -52,6 +56,7 @@ export default function OnboardingView() {
       updateProfile({ bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() })
     }
     setCustomAccessories(dayAccessories)
+    setCustomSupplemental(Object.keys(daySupplemental).length > 0 ? daySupplemental : null)
   }
 
   const fields = [
@@ -61,18 +66,25 @@ export default function OnboardingView() {
     { label: 'Overhead Press', value: press, set: setPress },
   ]
 
-  // ---- Step 3: Accessory Review ----
+  // ---- Step 3: Workout Plan Review ----
   if (step === 3) {
     return (
       <div className="min-h-full flex flex-col p-6">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold mb-2">Review Accessories</h1>
+          <h1 className="text-2xl font-bold mb-2">Review Workout Plan</h1>
           <p className="text-sm text-[#8e8e93]">
-            Add accessory exercises for each training day. You can change these again after each cycle.
+            Add accessories or swap the supplemental for any day. You can change these again after each cycle.
           </p>
         </div>
 
-        <AccessoryEditor value={dayAccessories} onChange={setDayAccessories} />
+        <WorkoutPlanEditor
+          accessories={dayAccessories}
+          onAccessoriesChange={setDayAccessories}
+          supplemental={daySupplemental}
+          onSupplementalChange={setDaySupplemental}
+          variantConfig={getVariantConfig(selectedVariant)}
+          units={units}
+        />
 
         <div className="flex-1 min-h-6" />
 

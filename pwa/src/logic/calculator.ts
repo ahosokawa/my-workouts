@@ -61,8 +61,18 @@ export function roundWeight(weight: number, units: Units = 'lbs'): number {
 /** Generate all prescribed sets for a main lift on a given week.
  *  3 warmup + 3 working (last is AMRAP) + supplemental sets (varies by variant).
  *  Default variant is FSL for backwards compatibility.
+ *
+ *  When `supplementalTM` is provided, the supplemental sets are computed against
+ *  that TM instead of the main `trainingMax` (used when swapping the supplemental
+ *  lift for a different exercise — e.g., front squat on deadlift day). Warmup
+ *  and working sets always use the main `trainingMax`.
  */
-export function prescribedSets(trainingMax: number, week: number, variant: ProgramVariant = 'fsl'): PrescribedSet[] {
+export function prescribedSets(
+  trainingMax: number,
+  week: number,
+  variant: ProgramVariant = 'fsl',
+  supplementalTM?: number,
+): PrescribedSet[] {
   const sets: PrescribedSet[] = []
   let counter = 0
 
@@ -99,7 +109,8 @@ export function prescribedSets(trainingMax: number, week: number, variant: Progr
   // Supplemental sets (configured by variant)
   const config = getVariantConfig(variant)
   const suppPct = config.supplementalPercentage(week)
-  const suppWeight = roundWeight(trainingMax * suppPct)
+  const suppBasis = supplementalTM ?? trainingMax
+  const suppWeight = roundWeight(suppBasis * suppPct)
   for (let i = 0; i < config.supplementalSets; i++) {
     counter++
     sets.push({

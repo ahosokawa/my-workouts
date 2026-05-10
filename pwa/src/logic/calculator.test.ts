@@ -164,6 +164,44 @@ describe('prescribedSets with BBS variant', () => {
   })
 })
 
+describe('prescribedSets with supplemental TM override', () => {
+  const tm = 450
+  const overrideTM = 250
+
+  it('uses overrideTM for supplemental weight (BBB)', () => {
+    const sets = prescribedSets(tm, 1, ProgramVariant.BBB, overrideTM)
+    const supp = sets.filter((s) => s.isSupplemental)
+    expect(supp).toHaveLength(5)
+    for (const s of supp) {
+      expect(s.weight).toBe(roundWeight(overrideTM * 0.50))
+      expect(s.percentage).toBe(0.50)
+      expect(s.targetReps).toBe(10)
+    }
+  })
+
+  it('keeps warmup and working weights based on main TM', () => {
+    const withOverride = prescribedSets(tm, 1, ProgramVariant.BBB, overrideTM).filter((s) => !s.isSupplemental)
+    const withoutOverride = prescribedSets(tm, 1, ProgramVariant.BBB).filter((s) => !s.isSupplemental)
+    expect(withOverride).toEqual(withoutOverride)
+  })
+
+  it('FSL with override: percentage scales by week, applied to overrideTM', () => {
+    const weekPcts = [0.65, 0.70, 0.75]
+    for (let week = 1; week <= 3; week++) {
+      const sets = prescribedSets(tm, week, ProgramVariant.FSL, overrideTM)
+      const supp = sets.filter((s) => s.isSupplemental)
+      expect(supp[0].percentage).toBe(weekPcts[week - 1])
+      expect(supp[0].weight).toBe(roundWeight(overrideTM * weekPcts[week - 1]))
+    }
+  })
+
+  it('undefined override behaves identically to omitted argument', () => {
+    const a = prescribedSets(tm, 1, ProgramVariant.BBB, undefined)
+    const b = prescribedSets(tm, 1, ProgramVariant.BBB)
+    expect(a).toEqual(b)
+  })
+})
+
 describe('deloadSets', () => {
   const tm = 200
 

@@ -24,6 +24,7 @@ export default function WorkoutView() {
   const updateAW = useStore((s) => s.updateActiveWorkout)
   const clearAW = useStore((s) => s.clearActiveWorkout)
   const customAccessories = useStore((s) => s.customAccessories)
+  const customSupplemental = useStore((s) => s.customSupplemental)
 
   const elapsed = useElapsedTimer(aw.isActive, aw.startTime)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
@@ -37,7 +38,10 @@ export default function WorkoutView() {
   const tm = useStore.getState().getTrainingMax(lift)
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
-  const sets = prescribedSets(tm, profile.currentWeek, currentVariant)
+  const suppOverride = customSupplemental?.[lift] ?? null
+  const sets = prescribedSets(tm, profile.currentWeek, currentVariant, suppOverride?.trainingMaxLbs)
+  const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
+  const suppDisplayName = suppOverride?.exercise.name ?? liftDisplayName(lift)
   const accessories = customAccessories?.[lift] ?? []
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
@@ -273,8 +277,11 @@ export default function WorkoutView() {
       const weight = effectiveMainWeight(i)  // in display units
       const weightLbs = toStorageLbs(weight, units)  // convert to lbs for storage
       const reps = effectiveMainReps(i)
+      const exerciseName = s.isSupplemental && suppOverride
+        ? suppOverride.exercise.name
+        : liftDisplayName(lift)
       logEntries.push({
-        exerciseName: liftDisplayName(lift),
+        exerciseName,
         isMainLift: true,
         setIndex: i,
         weight: weightLbs,
@@ -425,7 +432,7 @@ export default function WorkoutView() {
 
       {/* 5x5 Supplemental Sets */}
       <CollapsibleSection
-        title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${liftDisplayName(lift)}`}
+        title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${suppDisplayName}`}
         isCollapsed={collapsedSections.has('supplemental')}
         onToggle={() => toggleSection('supplemental')}
         badge={completionBadge(supplementalComplete, supplementalIndices.length)}
@@ -446,6 +453,7 @@ export default function WorkoutView() {
             onRepsChange={(v) => updateMainReps(i, v)}
             onToggle={() => toggleSet('main', i)}
             units={units}
+            showPlates={suppShowPlates}
           />
         ))}
       </CollapsibleSection>
