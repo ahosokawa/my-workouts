@@ -559,6 +559,7 @@ export default function WorkoutView() {
                 onRepsChange={(v) => updateMainReps(i, v)}
                 onToggle={() => toggleSet('main', i)}
                 units={units}
+                showPercentage={!isHypertrophy}
               />
               {/* RIR picker — only on the hypertrophy top set, while active and not yet completed */}
               {isHypertrophy && s.isAMRAP && aw.isActive && !completedMain.has(i) && (

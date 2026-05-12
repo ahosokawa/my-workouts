@@ -19,12 +19,15 @@ interface MainSetCardProps {
   onToggle: () => void
   units?: Units
   showPlates?: boolean
+  // Hypertrophy main-lift percentages reference the working top set (not the TM) and add no
+  // information once the weight is visible. Hide them in that context.
+  showPercentage?: boolean
 }
 
 export default function MainSetCard({
   set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
   overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle, units = 'lbs',
-  showPlates = true,
+  showPlates = true, showPercentage = true,
 }: MainSetCardProps) {
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null)
   const weightRef = useRef<HTMLInputElement>(null)
@@ -81,7 +84,9 @@ export default function MainSetCard({
             <span className={`text-xs font-semibold uppercase ${set.isWarmup ? 'text-[#8e8e93]' : set.isSupplemental ? 'text-[var(--color-yellow)]' : 'text-[var(--color-accent)]'}`}>
               {set.isWarmup ? 'Warmup' : set.isSupplemental ? 'Supplemental' : 'Working'}
             </span>
-            <span className="text-xs text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
+            {showPercentage && (
+              <span className="text-xs text-[#8e8e93]">{Math.round(set.percentage * 100)}%</span>
+            )}
           </div>
 
           {/* Weight: tap text to edit, blur to close */}
