@@ -5,13 +5,16 @@ import {
   MAIN_LIFTS,
   liftDisplayName,
   AccessoryWeightType,
+  ProgramType,
+  ProgressionType,
   toStorageLbs,
   displayRound,
 } from '../types'
-import type { AccessoryExercise, ExerciseDef, SupplementalOverride, Units } from '../types'
+import type { AccessoryExercise, ExerciseDef, SupplementalOverride, Units, ProgramType as ProgramTypeT, ProgressionType as ProgressionTypeT } from '../types'
 import type { VariantConfig } from '../logic/variants'
 import { roundWeight } from '../logic/calculator'
-import { getAccessories } from '../logic/accessories'
+import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
+import { hypertrophyDayLabel, dayHasTopSetMain } from '../logic/hypertrophyCalculator'
 import ExerciseDefFields from './ExerciseDefFields'
 import ExerciseLibraryList, { accessorySecondary } from './ExerciseLibraryList'
 
@@ -22,6 +25,7 @@ interface WorkoutPlanEditorProps {
   onSupplementalChange: (next: Record<number, SupplementalOverride>) => void
   variantConfig: VariantConfig
   units: Units
+  programType?: ProgramTypeT  // defaults to '531' for backwards-compat with existing callers
 }
 
 type AccessoryModal = { lift: MainLift } | null
@@ -44,9 +48,11 @@ export default function WorkoutPlanEditor({
   onSupplementalChange,
   variantConfig,
   units,
+  programType = ProgramType.FiveThreeOne,
 }: WorkoutPlanEditorProps) {
   const savedExercises = useStore((s) => s.savedExercises)
   const addSavedExercise = useStore((s) => s.addSavedExercise)
+  const isHypertrophy = programType === ProgramType.Hypertrophy
 
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
 
@@ -56,6 +62,9 @@ export default function WorkoutPlanEditor({
   const [accName, setAccName] = useState('')
   const [accSets, setAccSets] = useState('3')
   const [accReps, setAccReps] = useState('10')
+  const [accRepMin, setAccRepMin] = useState('')
+  const [accRepMax, setAccRepMax] = useState('')
+  const [accProgressionType, setAccProgressionType] = useState<ProgressionTypeT>(ProgressionType.Double)
   const [accWeightType, setAccWeightType] = useState<AccessoryWeightType>(AccessoryWeightType.Standard)
 
   // Supplemental modal state
@@ -76,17 +85,35 @@ export default function WorkoutPlanEditor({
 
   // ---- Unified exercise library ----
 
-  /** Look up sane default sets/reps for an exercise name in the context of `lift`,
-   *  preferring (1) the curated per-lift defaults, (2) any current use across
-   *  customAccessories on any day, (3) 3×10. */
-  function defaultSetsRepsFor(lift: MainLift, name: string): { sets: number; reps: number } {
+  /** Look up sane defaults for an exercise name in the context of `lift`.
+   *  Returns sets/reps plus (for hypertrophy) rep range and progression type. */
+  function defaultsFor(lift: MainLift, name: string): {
+    sets: number
+    reps: number
+    repRangeMin?: number
+    repRangeMax?: number
+    progressionType?: ProgressionTypeT
+  } {
     const lower = name.toLowerCase()
-    for (const def of getAccessories(lift)) {
-      if (def.name.toLowerCase() === lower) return { sets: def.sets, reps: def.reps }
+    const defs = isHypertrophy ? getHypertrophyAccessories(lift) : getAccessories(lift)
+    for (const def of defs) {
+      if (def.name.toLowerCase() === lower) return {
+        sets: def.sets,
+        reps: def.reps,
+        repRangeMin: def.repRangeMin,
+        repRangeMax: def.repRangeMax,
+        progressionType: def.progressionType,
+      }
     }
     for (const day of Object.values(accessories)) {
       for (const ex of day ?? []) {
-        if (ex.name.toLowerCase() === lower) return { sets: ex.sets, reps: ex.reps }
+        if (ex.name.toLowerCase() === lower) return {
+          sets: ex.sets,
+          reps: ex.reps,
+          repRangeMin: ex.repRangeMin,
+          repRangeMax: ex.repRangeMax,
+          progressionType: ex.progressionType,
+        }
       }
     }
     return { sets: 3, reps: 10 }
@@ -109,13 +136,14 @@ export default function WorkoutPlanEditor({
       for (const o of Object.values(supplemental)) {
         if (o) add(o.exercise)
       }
-      for (const ex of getAccessories(lift)) add(ex)
+      const defaults = isHypertrophy ? getHypertrophyAccessories(lift) : getAccessories(lift)
+      for (const ex of defaults) add(ex)
       return Array.from(map.values())
     }
     const m: Record<number, ExerciseDef[]> = {}
     for (const lift of MAIN_LIFTS) m[lift] = buildFor(lift)
     return m
-  }, [savedExercises, accessories, supplemental])
+  }, [savedExercises, accessories, supplemental, isHypertrophy])
 
   // ---- Accessory helpers ----
 
@@ -124,6 +152,9 @@ export default function WorkoutPlanEditor({
     setAccName('')
     setAccSets('3')
     setAccReps('10')
+    setAccRepMin('')
+    setAccRepMax('')
+    setAccProgressionType(ProgressionType.Double)
     setAccWeightType(AccessoryWeightType.Standard)
   }
 
@@ -138,23 +169,31 @@ export default function WorkoutPlanEditor({
   }
 
   function pickAccFromLibrary(lift: MainLift, def: ExerciseDef) {
-    const { sets, reps } = defaultSetsRepsFor(lift, def.name)
+    const d = defaultsFor(lift, def.name)
     setShowAccForm(true)
     setAccName(def.name)
     setAccWeightType(def.weightType)
-    setAccSets(String(sets))
-    setAccReps(String(reps))
+    setAccSets(String(d.sets))
+    setAccReps(String(d.reps))
+    if (d.repRangeMin !== undefined) setAccRepMin(String(d.repRangeMin))
+    if (d.repRangeMax !== undefined) setAccRepMax(String(d.repRangeMax))
+    if (d.progressionType) setAccProgressionType(d.progressionType)
   }
 
   function saveAccessory(lift: MainLift) {
     const name = accName.trim()
     if (!name) return
+    const minN = Number(accRepMin)
+    const maxN = Number(accRepMax)
+    const hasRange = isHypertrophy && minN > 0 && maxN > 0 && maxN >= minN
     const newEx: AccessoryExercise = {
       id: generateId(),
       name,
       sets: Math.max(1, Number(accSets) || 3),
-      reps: Math.max(1, Number(accReps) || 10),
+      reps: Math.max(1, Number(accReps) || (hasRange ? minN : 10)),
       weightType: accWeightType,
+      ...(hasRange ? { repRangeMin: minN, repRangeMax: maxN } : {}),
+      ...(isHypertrophy ? { progressionType: accProgressionType } : {}),
     }
     onAccessoriesChange({
       ...accessories,
@@ -246,6 +285,11 @@ export default function WorkoutPlanEditor({
     return `${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${name}`
   }
 
+  function dayHeaderLabel(lift: MainLift, dayIndex: number): string {
+    if (isHypertrophy) return hypertrophyDayLabel(dayIndex + 1)
+    return `Day ${dayIndex + 1} – ${liftDisplayName(lift)}`
+  }
+
   return (
     <>
       <div className="space-y-3">
@@ -254,6 +298,7 @@ export default function WorkoutPlanEditor({
           const isExpanded = expandedDays.has(lift)
           const dayAccessories = accessories[lift] ?? []
           const override = supplemental[lift]
+          const hasTopSet = !isHypertrophy || dayHasTopSetMain(programType, dayIndex + 1)
           return (
             <div key={lift} className="bg-[#1c1c1e] rounded-xl overflow-hidden">
               <button
@@ -262,10 +307,14 @@ export default function WorkoutPlanEditor({
               >
                 <div>
                   <span className="font-medium text-sm">
-                    Day {dayIndex + 1} &ndash; {liftDisplayName(lift)}
+                    {dayHeaderLabel(lift, dayIndex)}
                   </span>
                   <span className="text-xs text-[#8e8e93] ml-2">
-                    {suppSummary(lift)} · {dayAccessories.length} {dayAccessories.length === 1 ? 'accessory' : 'accessories'}
+                    {isHypertrophy
+                      ? (hasTopSet ? `Top set: ${liftDisplayName(lift)}` : 'No top-set main')
+                      : suppSummary(lift)}
+                    {' · '}
+                    {dayAccessories.length} {dayAccessories.length === 1 ? 'accessory' : 'accessories'}
                   </span>
                 </div>
                 <span className={`text-[#8e8e93] text-sm transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
@@ -275,7 +324,8 @@ export default function WorkoutPlanEditor({
 
               {isExpanded && (
                 <div className="px-4 pb-3 space-y-4">
-                  {/* Supplemental */}
+                  {/* Supplemental (5/3/1 only) */}
+                  {!isHypertrophy && (
                   <div>
                     <h3 className="text-[11px] uppercase tracking-wider text-[#8e8e93] mb-2">Supplemental</h3>
                     <div className="bg-[#2c2c2e] rounded-lg px-3 py-2.5">
@@ -304,6 +354,7 @@ export default function WorkoutPlanEditor({
                       </div>
                     </div>
                   </div>
+                  )}
 
                   {/* Accessories */}
                   <div>
@@ -406,17 +457,60 @@ export default function WorkoutPlanEditor({
                         className="w-full text-sm"
                       />
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-sm text-[#8e8e93] mb-1">Reps</label>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={accReps}
-                        onChange={(e) => setAccReps(e.target.value)}
-                        className="w-full text-sm"
-                      />
-                    </div>
+                    {isHypertrophy ? (
+                      <>
+                        <div className="flex-1">
+                          <label className="block text-sm text-[#8e8e93] mb-1">Min reps</label>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="8"
+                            value={accRepMin}
+                            onChange={(e) => setAccRepMin(e.target.value)}
+                            className="w-full text-sm"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-sm text-[#8e8e93] mb-1">Max reps</label>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="10"
+                            value={accRepMax}
+                            onChange={(e) => setAccRepMax(e.target.value)}
+                            className="w-full text-sm"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex-1">
+                        <label className="block text-sm text-[#8e8e93] mb-1">Reps</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={accReps}
+                          onChange={(e) => setAccReps(e.target.value)}
+                          className="w-full text-sm"
+                        />
+                      </div>
+                    )}
                   </div>
+                  {isHypertrophy && (
+                    <div>
+                      <label className="block text-sm text-[#8e8e93] mb-1">Progression</label>
+                      <select
+                        value={accProgressionType}
+                        onChange={(e) => setAccProgressionType(e.target.value as ProgressionTypeT)}
+                        className="w-full text-sm bg-[#1c1c1e] rounded-md px-2 py-2"
+                      >
+                        <option value={ProgressionType.Double}>Double progression</option>
+                        <option value={ProgressionType.RepsThenLoad}>Reps then load</option>
+                        <option value={ProgressionType.RepsOnly}>Reps only (no autoprogress)</option>
+                        <option value={ProgressionType.RomStages}>ROM stages (manual)</option>
+                        <option value={ProgressionType.Fixed}>Fixed sets × reps</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="flex gap-3 pt-2">
                     <button onClick={resetAccForm} className="flex-1 py-2.5 rounded-lg bg-[#38383a] text-sm">
                       Back

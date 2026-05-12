@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, liftFromDay, AccessoryWeightType, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
+import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, hypertrophyDayLabel } from '../logic/hypertrophyCalculator'
+import {
+  nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
+  recentMainLiftTopSets, lastAccessorySession,
+} from '../logic/progression'
 import { estimated1RM } from '../logic/brzycki'
 import { calculateWilks } from '../logic/wilks'
 import { barbellWeight } from '../logic/plates'
@@ -19,6 +24,7 @@ export default function WorkoutView() {
   const setLogs = useStore((s) => s.setLogs)
   const saveWorkout = useStore((s) => s.saveWorkout)
   const advanceDay = useStore((s) => s.advanceDay)
+  const updateProfile = useStore((s) => s.updateProfile)
   const addWilksEntry = useStore((s) => s.addWilksEntry)
   const aw = useStore((s) => s.activeWorkout)
   const updateAW = useStore((s) => s.updateActiveWorkout)
@@ -29,20 +35,43 @@ export default function WorkoutView() {
   const elapsed = useElapsedTimer(aw.isActive, aw.startTime)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
+  // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
+  const [topSetRir, setTopSetRir] = useState<number | null>(null)
 
   if (!profile) return null
-  const lift = liftFromDay(profile.currentDay)
-  if (!lift) return null
+  const programType = profile.programType ?? ProgramType.FiveThreeOne
+  const isHypertrophy = programType === ProgramType.Hypertrophy
+  const lift = mainLiftForDay(programType, profile.currentDay)
+
+  // Hypertrophy day 4 (Pull Focus) has no top-set main lift — we render only accessories.
+  // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.
+  // The accessories list is keyed by the MainLift slot — Day 4 uses MainLift.ShoulderPress as the slot.
+  const accessoriesSlot = lift ?? 4
+
+  if (!lift && !isHypertrophy) return null  // 5/3/1 always needs a lift
 
   const units = profile.units ?? 'lbs'
-  const tm = useStore.getState().getTrainingMax(lift)
+  const tm = lift ? useStore.getState().getTrainingMax(lift) : 0
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
-  const suppOverride = customSupplemental?.[lift] ?? null
-  const sets = prescribedSets(tm, profile.currentWeek, currentVariant, suppOverride?.trainingMaxLbs)
+  const suppOverride = (!isHypertrophy && lift) ? (customSupplemental?.[lift] ?? null) : null
+
+  // Build the main-lift prescription. For hypertrophy with a top-set main, use the stored
+  // top-set weight; the algorithm computes warmups off of it. For day 4 (no main), empty.
+  const sets = (() => {
+    if (!lift) return []
+    if (isHypertrophy) {
+      const topSetLbs = profile.hypertrophyTopSets?.[lift]
+      if (!topSetLbs || topSetLbs <= 0) return []
+      const range = topSetRepRange(lift)
+      return hypertrophyMainSets(topSetLbs, range.min, range.max)
+    }
+    return prescribedSets(tm, profile.currentWeek, currentVariant, suppOverride?.trainingMaxLbs)
+  })()
+
   const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
-  const suppDisplayName = suppOverride?.exercise.name ?? liftDisplayName(lift)
-  const accessories = customAccessories?.[lift] ?? []
+  const suppDisplayName = suppOverride?.exercise.name ?? (lift ? liftDisplayName(lift) : '')
+  const accessories = customAccessories?.[accessoriesSlot] ?? []
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
   const completedMain = useMemo(() => new Set(aw.completedMain), [aw.completedMain])
@@ -111,6 +140,11 @@ export default function WorkoutView() {
 
   const defaultWeight = useCallback(
     (ex: AccessoryExercise): string => {
+      // Hypertrophy: prefer the progression algorithm's suggestion when it exists.
+      if (isHypertrophy) {
+        const s = accessorySuggestion(ex)
+        if (s && s.weight > 0) return String(s.weight)
+      }
       const last = setLogs
         .filter((l) => l.exerciseName === ex.name && !l.isMainLift && l.isCompleted && l.weight > 0)
         .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
@@ -125,23 +159,31 @@ export default function WorkoutView() {
       }
       return ''
     },
-    [setLogs, profile, units],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setLogs, profile, units, isHypertrophy],
   )
 
   const defaultReps = useCallback(
     (ex: AccessoryExercise): string => {
+      if (isHypertrophy) {
+        const s = accessorySuggestion(ex)
+        if (s) return String(s.reps)
+        if (ex.repRangeMin !== undefined) return String(ex.repRangeMin)
+      }
       const last = setLogs
         .filter((l) => l.exerciseName === ex.name && !l.isMainLift && l.isCompleted)
         .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
         [0]
       return last ? String(last.targetReps) : String(ex.reps)
     },
-    [setLogs],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setLogs, isHypertrophy],
   )
 
   function currentBestE1RM(): number | null {
+    if (!lift) return null
     const logs = setLogs.filter(
-      (l) => l.exerciseName === liftDisplayName(lift!) && l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
+      (l) => l.exerciseName === liftDisplayName(lift) && l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
     )
     let best: number | null = null
     for (const l of logs) {
@@ -149,6 +191,60 @@ export default function WorkoutView() {
       if (e !== null && (best === null || e > best)) best = e
     }
     return best
+  }
+
+  // ---- Hypertrophy progression suggestions ----
+
+  /** For the current main lift in hypertrophy mode, what does the algorithm
+   *  suggest for next session? Used to update profile.hypertrophyTopSets on save. */
+  function computeNextHypertrophyTopSet(actualReps: number, rir: number | null): { weightLbs: number; message: string } | null {
+    if (!isHypertrophy || !lift || !profile) return null
+    const currentTopLbs = profile.hypertrophyTopSets?.[lift] ?? 0
+    if (currentTopLbs <= 0) return null
+    const range = topSetRepRange(lift)
+    const recent = recentMainLiftTopSets(setLogs, lift, 3).map((l) => ({
+      weightLbs: l.weight,
+      actualReps: l.actualReps ?? 0,
+    }))
+    const out = nextTopSetRpe({
+      currentTopSetLbs: currentTopLbs,
+      lastActualReps: actualReps,
+      lastRir: rir,
+      repRangeMin: range.min,
+      repRangeMax: range.max,
+      incrementLbs: liftProgressionAmount(lift, 'lbs'),
+      recentHistory: recent,
+    })
+    return { weightLbs: out.weightLbs, message: out.message }
+  }
+
+  /** Suggested next set for an accessory based on its progressionType and history. */
+  function accessorySuggestion(ex: AccessoryExercise): { weight: number; reps: number; message: string } | null {
+    if (!isHypertrophy) return null
+    const pType = ex.progressionType ?? ProgressionType.Fixed
+    if (pType === ProgressionType.Fixed || pType === ProgressionType.RepsOnly || pType === ProgressionType.RomStages) return null
+    const range = ex.repRangeMin !== undefined && ex.repRangeMax !== undefined
+      ? { min: ex.repRangeMin, max: ex.repRangeMax }
+      : { min: Math.max(1, ex.reps - 2), max: ex.reps }
+    const last = lastAccessorySession(setLogs, ex.name)
+    if (!last) return null
+    if (pType === ProgressionType.RepsThenLoad) {
+      const s = nextRepsThenLoad({
+        lastSession: last,
+        bodyWeightLbs: ex.weightType === AccessoryWeightType.Bodyweight ? (profile?.bodyWeightLbs ?? 0) : 0,
+        repRangeMin: range.min,
+        repRangeMax: range.max,
+        incrementLbs: 5,
+      })
+      return { weight: displayRound(s.weightLbs, units), reps: s.targetReps, message: s.message }
+    }
+    const s = nextDoubleProgression({
+      lastSession: last,
+      repRangeMin: range.min,
+      repRangeMax: range.max,
+      incrementLbs: 5,
+    })
+    return { weight: displayRound(s.weightLbs, units), reps: s.targetReps, message: s.message }
   }
 
   function minRepsToBeat(target: number, weight: number): number | null {
@@ -178,10 +274,15 @@ export default function WorkoutView() {
       }
     }
     setCollapsedSections(new Set())
+    setTopSetRir(null)
+    // Default top-set reps: bottom of range for hypertrophy, AMRAP minimum for 5/3/1.
+    const startingReps = isHypertrophy && lift
+      ? topSetRepRange(lift).min
+      : amrapMinimum(profile!.currentWeek)
     updateAW({
       isActive: true,
       startTime: Date.now(),
-      amrapReps: amrapMinimum(profile!.currentWeek),
+      amrapReps: startingReps,
       completedMain: [],
       completedAccessory: [],
       accWeights: w,
@@ -264,7 +365,7 @@ export default function WorkoutView() {
   }
 
   function finishWorkout() {
-    if (!profile || !lift) return
+    if (!profile) return
     const duration = aw.startTime ? Math.floor((Date.now() - aw.startTime) / 1000) : 0
 
     const logEntries: Parameters<typeof saveWorkout>[1] = []
@@ -279,7 +380,7 @@ export default function WorkoutView() {
       const reps = effectiveMainReps(i)
       const exerciseName = s.isSupplemental && suppOverride
         ? suppOverride.exercise.name
-        : liftDisplayName(lift)
+        : (lift ? liftDisplayName(lift) : 'Main Lift')
       logEntries.push({
         exerciseName,
         isMainLift: true,
@@ -290,6 +391,8 @@ export default function WorkoutView() {
         isAMRAP: s.isAMRAP,
         isCompleted: completed,
         completedAt: completed ? new Date().toISOString() : null,
+        // Persist RIR on the hypertrophy top-set only (the lone AMRAP entry).
+        ...(s.isAMRAP && isHypertrophy && completed ? { rir: topSetRir } : {}),
       })
       if (s.isAMRAP && completed) {
         curAmrapWeight = weightLbs
@@ -317,13 +420,34 @@ export default function WorkoutView() {
     }
 
     saveWorkout(
-      { date: new Date().toISOString(), liftRawValue: lift, week: profile.currentWeek, cycleNumber: profile.cycleNumber, durationSeconds: duration, variant: currentVariant },
+      {
+        date: new Date().toISOString(),
+        liftRawValue: lift ?? 0,  // 0 = no main lift (hypertrophy Pull day)
+        week: profile.currentWeek,
+        cycleNumber: profile.cycleNumber,
+        durationSeconds: duration,
+        variant: currentVariant,
+      },
       logEntries,
     )
+
+    // Hypertrophy: bump the stored top-set weight for next session via the autoprogression algo.
+    if (isHypertrophy && lift && curAmrapReps > 0) {
+      const next = computeNextHypertrophyTopSet(curAmrapReps, topSetRir)
+      if (next) {
+        updateProfile({
+          hypertrophyTopSets: {
+            ...(profile.hypertrophyTopSets ?? {}),
+            [lift]: next.weightLbs,
+          },
+        })
+      }
+    }
 
     // Wilks
     if (profile.bodyWeightLbs && profile.bodyWeightLbs > 0) {
       const allLogs = useStore.getState().setLogs
+      const liftName = lift ? liftDisplayName(lift) : null
       const bestFor = (name: string) => {
         let best = 0
         for (const l of allLogs) {
@@ -332,7 +456,7 @@ export default function WorkoutView() {
             if (e !== null && e > best) best = e
           }
         }
-        if (name === liftDisplayName(lift!) && curAmrapReps > 0) {
+        if (liftName && name === liftName && curAmrapReps > 0) {
           const e = estimated1RM(curAmrapWeight, curAmrapReps)
           if (e !== null && e > best) best = e
         }
@@ -378,8 +502,16 @@ export default function WorkoutView() {
       <div className="bg-[#1c1c1e] rounded-xl p-4">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold">Week {profile.currentWeek}: {liftDisplayName(lift)}</h1>
-            <p className="text-sm text-[#8e8e93]">Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4 · {variantConfig.shortLabel}</p>
+            <h1 className="text-xl font-bold">
+              Week {profile.currentWeek}:{' '}
+              {isHypertrophy
+                ? hypertrophyDayLabel(profile.currentDay)
+                : (lift ? liftDisplayName(lift) : '')}
+            </h1>
+            <p className="text-sm text-[#8e8e93]">
+              Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4
+              {isHypertrophy ? ' · Hypertrophy' : ` · ${variantConfig.shortLabel}`}
+            </p>
           </div>
           {aw.isActive && (
             <div className="text-right">
@@ -403,66 +535,98 @@ export default function WorkoutView() {
         <RestTimer lastSetTime={aw.lastSetTime} />
       )}
 
-      {/* Warmups + 5/3/1 Working Sets */}
-      <CollapsibleSection
-        title="Warmups + 5/3/1"
-        isCollapsed={collapsedSections.has('warmup-working')}
-        onToggle={() => toggleSection('warmup-working')}
-        badge={completionBadge(warmupWorkingComplete, warmupWorkingIndices.length)}
-      >
-        {warmupWorkingIndices.map(({ set: s, index: i }) => (
-          <MainSetCard
-            key={s.id}
-            set={s}
-            isActive={aw.isActive}
-            isCompleted={completedMain.has(i)}
-            amrapReps={aw.amrapReps}
-            setAmrapReps={(v) => updateAW({ amrapReps: v })}
-            bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
-            minRepsToBeat={minRepsToBeat}
-            overrideWeight={aw.mainWeights?.[i]}
-            overrideReps={aw.mainReps?.[i]}
-            onWeightChange={(v) => updateMainWeight(i, v)}
-            onRepsChange={(v) => updateMainReps(i, v)}
-            onToggle={() => toggleSet('main', i)}
-            units={units}
-          />
-        ))}
-      </CollapsibleSection>
+      {/* Warmups + Top Set (hypertrophy) or Warmups + 5/3/1 working sets */}
+      {sets.length > 0 && (
+        <CollapsibleSection
+          title={isHypertrophy ? `Warmups + Top Set – ${lift ? liftDisplayName(lift) : ''}` : 'Warmups + 5/3/1'}
+          isCollapsed={collapsedSections.has('warmup-working')}
+          onToggle={() => toggleSection('warmup-working')}
+          badge={completionBadge(warmupWorkingComplete, warmupWorkingIndices.length)}
+        >
+          {warmupWorkingIndices.map(({ set: s, index: i }) => (
+            <div key={s.id}>
+              <MainSetCard
+                set={s}
+                isActive={aw.isActive}
+                isCompleted={completedMain.has(i)}
+                amrapReps={aw.amrapReps}
+                setAmrapReps={(v) => updateAW({ amrapReps: v })}
+                bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
+                minRepsToBeat={minRepsToBeat}
+                overrideWeight={aw.mainWeights?.[i]}
+                overrideReps={aw.mainReps?.[i]}
+                onWeightChange={(v) => updateMainWeight(i, v)}
+                onRepsChange={(v) => updateMainReps(i, v)}
+                onToggle={() => toggleSet('main', i)}
+                units={units}
+              />
+              {/* RIR picker — only on the hypertrophy top set, while active and not yet completed */}
+              {isHypertrophy && s.isAMRAP && aw.isActive && !completedMain.has(i) && (
+                <div className="ml-10 mb-3 mt-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-xs text-[#8e8e93] mb-1.5">RIR (optional — reps left in the tank)</div>
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2, 3].map((r) => {
+                      const selected = topSetRir === r
+                      return (
+                        <button
+                          key={r}
+                          onClick={() => setTopSetRir(selected ? null : r)}
+                          className={`flex-1 py-1.5 text-xs font-semibold rounded-md ${
+                            selected ? 'bg-[var(--color-accent)] text-white' : 'bg-[#38383a] text-[#8e8e93]'
+                          }`}
+                        >
+                          {r === 3 ? '3+' : r}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </CollapsibleSection>
+      )}
 
-      {/* 5x5 Supplemental Sets */}
-      <CollapsibleSection
-        title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${suppDisplayName}`}
-        isCollapsed={collapsedSections.has('supplemental')}
-        onToggle={() => toggleSection('supplemental')}
-        badge={completionBadge(supplementalComplete, supplementalIndices.length)}
-      >
-        {supplementalIndices.map(({ set: s, index: i }) => (
-          <MainSetCard
-            key={s.id}
-            set={s}
-            isActive={aw.isActive}
-            isCompleted={completedMain.has(i)}
-            amrapReps={aw.amrapReps}
-            setAmrapReps={(v) => updateAW({ amrapReps: v })}
-            bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
-            minRepsToBeat={minRepsToBeat}
-            overrideWeight={aw.mainWeights?.[i]}
-            overrideReps={aw.mainReps?.[i]}
-            onWeightChange={(v) => updateMainWeight(i, v)}
-            onRepsChange={(v) => updateMainReps(i, v)}
-            onToggle={() => toggleSet('main', i)}
-            units={units}
-            showPlates={suppShowPlates}
-          />
-        ))}
-      </CollapsibleSection>
+      {/* 5/3/1 Supplemental Sets — not present in hypertrophy */}
+      {!isHypertrophy && supplementalIndices.length > 0 && (
+        <CollapsibleSection
+          title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${suppDisplayName}`}
+          isCollapsed={collapsedSections.has('supplemental')}
+          onToggle={() => toggleSection('supplemental')}
+          badge={completionBadge(supplementalComplete, supplementalIndices.length)}
+        >
+          {supplementalIndices.map(({ set: s, index: i }) => (
+            <MainSetCard
+              key={s.id}
+              set={s}
+              isActive={aw.isActive}
+              isCompleted={completedMain.has(i)}
+              amrapReps={aw.amrapReps}
+              setAmrapReps={(v) => updateAW({ amrapReps: v })}
+              bestE1RM={bestE1RM !== null ? toDisplayWeight(bestE1RM, units) : null}
+              minRepsToBeat={minRepsToBeat}
+              overrideWeight={aw.mainWeights?.[i]}
+              overrideReps={aw.mainReps?.[i]}
+              onWeightChange={(v) => updateMainWeight(i, v)}
+              onRepsChange={(v) => updateMainReps(i, v)}
+              onToggle={() => toggleSet('main', i)}
+              units={units}
+              showPlates={suppShowPlates}
+            />
+          ))}
+        </CollapsibleSection>
+      )}
 
       {/* Accessories */}
       {accessories.map((ex) => {
         const sectionId = `acc-${ex.name}`
         const accKeys = Array.from({ length: ex.sets }, (_, i) => `${ex.name}-${i}`)
         const allAccDone = accKeys.every((k) => completedAccessory.has(k))
+        const repsLabel =
+          ex.repRangeMin !== undefined && ex.repRangeMax !== undefined
+            ? `${ex.repRangeMin}-${ex.repRangeMax}`
+            : String(ex.reps)
+        const suggestion = accessorySuggestion(ex)
         return (
           <CollapsibleSection
             key={ex.id}
@@ -470,8 +634,14 @@ export default function WorkoutView() {
             isCollapsed={collapsedSections.has(sectionId)}
             onToggle={() => toggleSection(sectionId)}
             badge={completionBadge(allAccDone, ex.sets)}
-            trailing={<span className="text-xs text-[#8e8e93]">{ex.sets}x{ex.reps}</span>}
+            trailing={<span className="text-xs text-[#8e8e93]">{ex.sets}x{repsLabel}</span>}
           >
+            {ex.notes && (
+              <div className="text-xs text-[#8e8e93] -mt-1 mb-2">{ex.notes}</div>
+            )}
+            {suggestion && (
+              <div className="text-xs text-[var(--color-accent)] mb-2">{suggestion.message}</div>
+            )}
             {Array.from({ length: ex.sets }, (_, si) => {
               const key = `${ex.name}-${si}`
               const completed = completedAccessory.has(key)
@@ -524,7 +694,7 @@ export default function WorkoutView() {
                       />
                     ) : (
                       <span className={`text-base ${completed ? 'text-[#8e8e93]' : ''}`}>
-                        {aw.accReps[key] || ex.reps} reps
+                        {aw.accReps[key] || repsLabel} reps
                       </span>
                     )}
                   </div>

@@ -30,6 +30,8 @@ const EXISTING_PROFILE: UserProfile = {
   bodyWeightLbs: 180,
   bodyWeightLastUpdated: '2026-01-01T00:00:00.000Z',
   createdAt: '2025-12-01T00:00:00.000Z',
+  programType: '531',
+  cycleWeeks: 3,
 }
 
 // A "current" state skeleton — mergePersistedState spreads persisted over this.
@@ -222,6 +224,42 @@ describe('mergePersistedState — sex migration', () => {
     const result = mergePersistedState(persisted, currentState())
 
     expect(result.profile!.sex).toBe('female')
+  })
+})
+
+describe('mergePersistedState — program type migration', () => {
+  it("defaults programType to '531' for existing user without it", () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { programType: _, cycleWeeks: __, ...legacy } = EXISTING_PROFILE
+    const persisted = {
+      profile: legacy,
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.programType).toBe('531')
+    expect(result.profile!.cycleWeeks).toBe(3)
+  })
+
+  it("preserves a 'hypertrophy' programType when already set", () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, programType: 'hypertrophy' as const, cycleWeeks: 7 },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.programType).toBe('hypertrophy')
+    expect(result.profile!.cycleWeeks).toBe(7)
+  })
+
+  it('preserves cycleWeeks when already set', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, cycleWeeks: 5 },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.cycleWeeks).toBe(5)
   })
 })
 

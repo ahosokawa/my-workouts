@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig, SupplementalOverride, ExerciseDef } from './types'
-import { liftFromDay, MAIN_LIFTS, PhaseType, toStorageLbs, toDisplayWeight } from './types'
+import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig, SupplementalOverride, ExerciseDef, ProgramType } from './types'
+import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
-import { getAccessories } from './logic/accessories'
+import { getAccessories, getHypertrophyAccessories } from './logic/accessories'
 
 // ============================================================
 // Helpers
@@ -74,13 +74,14 @@ interface AppState {
   cloudSync: CloudSyncConfig | null
 
   // Profile actions
-  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant, tmPercentage?: 85 | 90, sex?: 'male' | 'female', units?: Units) => void
+  createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant, tmPercentage?: 85 | 90, sex?: 'male' | 'female', units?: Units, programType?: ProgramType) => void
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: () => boolean  // returns true if cycle completed
   startNewCycle: (variant?: ProgramVariant) => void
   startDeload: (deloadType: DeloadType) => void
   advanceDeloadDay: () => void
+  switchProgram: (programType: ProgramType) => void
 
   // Workout actions
   saveWorkout: (session: Omit<WorkoutSession, 'id'>, logs: Omit<SetLog, 'id' | 'sessionId'>[]) => string
@@ -179,6 +180,8 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
     if (state.profile.isDeloading === undefined) updates.isDeloading = false
     if (state.profile.deloadType === undefined) updates.deloadType = null
     if (state.profile.deloadDay === undefined) updates.deloadDay = 1
+    if (!state.profile.programType) updates.programType = PT.FiveThreeOne
+    if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
     if (Object.keys(updates).length > 0) {
       state.profile = { ...state.profile, ...updates }
     }
@@ -205,8 +208,11 @@ export const useStore = create<AppState>()(
       restNotifyMinutes: 3,
       cloudSync: null,
 
-      createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units) => {
-        const pct = (tmPercentage ?? 90) / 100
+      createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units, programType) => {
+        const program = programType ?? PT.FiveThreeOne
+        // Hypertrophy locks tmPercentage to 85; 5/3/1 defaults to 90 when unspecified.
+        const effectiveTmPct: 85 | 90 = program === PT.Hypertrophy ? 85 : (tmPercentage ?? 90)
+        const pct = effectiveTmPct / 100
         const u = units ?? 'lbs'
         // User enters values in their units — convert to lbs for storage
         const sqLbs = toStorageLbs(squatRM, u)
@@ -218,6 +224,14 @@ export const useStore = create<AppState>()(
         const bpTM = toStorageLbs(roundWeight(benchRM * pct, u), u)
         const dlTM = toStorageLbs(roundWeight(deadliftRM * pct, u), u)
         const prTM = toStorageLbs(roundWeight(pressRM * pct, u), u)
+        // Hypertrophy seeds initial top sets at ~85% of TM (≈72% of 1RM)
+        const hypertrophyTopSets = program === PT.Hypertrophy
+          ? {
+              1: toStorageLbs(roundWeight(toDisplayWeight(sqTM, u) * 0.85, u), u),
+              2: toStorageLbs(roundWeight(toDisplayWeight(bpTM, u) * 0.85, u), u),
+              3: toStorageLbs(roundWeight(toDisplayWeight(dlTM, u) * 0.85, u), u),
+            }
+          : undefined
         const profile: UserProfile = {
           squatOneRepMax: sqLbs,
           benchOneRepMax: bpLbs,
@@ -234,7 +248,7 @@ export const useStore = create<AppState>()(
           currentVariant: variant ?? 'fsl',
           leaderCycleCount: 0,
           anchorCycleCount: 0,
-          tmPercentage: tmPercentage ?? 90,
+          tmPercentage: effectiveTmPct,
           sex: sex ?? 'male',
           units: u,
           isDeloading: false,
@@ -243,6 +257,9 @@ export const useStore = create<AppState>()(
           bodyWeightLbs: null,
           bodyWeightLastUpdated: null,
           createdAt: new Date().toISOString(),
+          programType: program,
+          cycleWeeks: program === PT.Hypertrophy ? 7 : 3,
+          hypertrophyTopSets,
         }
         set({ profile })
       },
@@ -283,7 +300,8 @@ export const useStore = create<AppState>()(
           currentWeek++
         }
 
-        if (currentWeek > 3) {
+        const cycleLength = profile.cycleWeeks ?? 3
+        if (currentWeek > cycleLength) {
           // Cycle complete
           set({
             profile: {
@@ -374,6 +392,58 @@ export const useStore = create<AppState>()(
             profile: { ...profile, deloadDay: nextDay },
           })
         }
+      },
+
+      switchProgram: (programType) => {
+        const { profile } = get()
+        if (!profile) return
+        // tmPercentage convention: hypertrophy = 85, 5/3/1 preserves current (default 90).
+        const newTmPct: 85 | 90 = programType === PT.Hypertrophy ? 85 : profile.tmPercentage
+        const u = profile.units ?? 'lbs'
+        const computeTM = (rmLbs: number) =>
+          toStorageLbs(roundWeight(toDisplayWeight(rmLbs, u) * (newTmPct / 100), u), u)
+        const sqTM = computeTM(profile.squatOneRepMax)
+        const bpTM = computeTM(profile.benchOneRepMax)
+        const dlTM = computeTM(profile.deadliftOneRepMax)
+        const prTM = computeTM(profile.pressOneRepMax)
+        // Seed hypertrophy top sets at ~85% of TM (≈ spec week-1 starting top sets).
+        const hypertrophyTopSets =
+          programType === PT.Hypertrophy
+            ? {
+                1: toStorageLbs(roundWeight(toDisplayWeight(sqTM, u) * 0.85, u), u),
+                2: toStorageLbs(roundWeight(toDisplayWeight(bpTM, u) * 0.85, u), u),
+                3: toStorageLbs(roundWeight(toDisplayWeight(dlTM, u) * 0.85, u), u),
+              }
+            : undefined
+        // Replace accessories with the new program's defaults.
+        const accessories: Record<number, AccessoryExercise[]> = {}
+        for (const lift of MAIN_LIFTS) {
+          const defaults = programType === PT.Hypertrophy
+            ? getHypertrophyAccessories(lift)
+            : getAccessories(lift)
+          accessories[lift] = defaults.map((ex) => ({ ...ex }))
+        }
+        set({
+          profile: {
+            ...profile,
+            programType,
+            cycleWeeks: programType === PT.Hypertrophy ? 7 : 3,
+            tmPercentage: newTmPct,
+            squatTM: sqTM,
+            benchTM: bpTM,
+            deadliftTM: dlTM,
+            pressTM: prTM,
+            currentWeek: 1,
+            currentDay: 1,
+            isCycleComplete: false,
+            isDeloading: false,
+            deloadType: null,
+            deloadDay: 1,
+            hypertrophyTopSets,
+          },
+          customAccessories: accessories,
+          customSupplemental: null,
+        })
       },
 
       saveWorkout: (session, logs) => {

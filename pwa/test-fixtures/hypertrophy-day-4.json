@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "exportedAt": "2026-05-12T00:00:00.000Z",
+  "profile": {
+    "squatOneRepMax": 265,
+    "benchOneRepMax": 185,
+    "deadliftOneRepMax": 343,
+    "pressOneRepMax": 133,
+    "squatTM": 225,
+    "benchTM": 157.5,
+    "deadliftTM": 290,
+    "pressTM": 112.5,
+    "currentWeek": 1,
+    "currentDay": 4,
+    "cycleNumber": 1,
+    "isCycleComplete": false,
+    "currentVariant": "fsl",
+    "leaderCycleCount": 0,
+    "anchorCycleCount": 0,
+    "tmPercentage": 85,
+    "sex": "male",
+    "units": "lbs",
+    "isDeloading": false,
+    "deloadType": null,
+    "deloadDay": 1,
+    "bodyWeightLbs": 180,
+    "bodyWeightLastUpdated": "2026-05-12T00:00:00.000Z",
+    "createdAt": "2026-05-01T00:00:00.000Z",
+    "programType": "hypertrophy",
+    "cycleWeeks": 7,
+    "hypertrophyTopSets": { "1": 192.5, "2": 135, "3": 247.5 }
+  },
+  "sessions": [],
+  "setLogs": [],
+  "wilksEntries": [],
+  "customAccessories": {
+    "1": [
+      { "id": "h-front-sq", "name": "Front Squat", "weightType": "barbell",
+        "sets": 3, "reps": 12, "repRangeMin": 10, "repRangeMax": 12, "progressionType": "double_progression" }
+    ],
+    "2": [
+      { "id": "h-ohp", "name": "Overhead Press", "weightType": "barbell",
+        "sets": 3, "reps": 7, "repRangeMin": 6, "repRangeMax": 8, "progressionType": "double_progression" }
+    ],
+    "3": [
+      { "id": "h-rdl", "name": "Romanian Deadlift", "weightType": "barbell",
+        "sets": 3, "reps": 9, "repRangeMin": 8, "repRangeMax": 10, "progressionType": "double_progression" }
+    ],
+    "4": [
+      { "id": "h-pullup", "name": "Pull-Ups", "weightType": "bodyweight",
+        "sets": 4, "reps": 7, "repRangeMin": 6, "repRangeMax": 8, "progressionType": "reps_then_load",
+        "notes": "Strict, full ROM. Add weight via DB between feet when 4×8 BW is easy." },
+      { "id": "h-csr", "name": "Chest-Supported DB Row", "weightType": "standard",
+        "sets": 4, "reps": 9, "repRangeMin": 8, "repRangeMax": 10, "progressionType": "double_progression" },
+      { "id": "h-db-row", "name": "DB Bent-Over Row", "weightType": "standard",
+        "sets": 3, "reps": 11, "repRangeMin": 10, "repRangeMax": 12, "progressionType": "double_progression" },
+      { "id": "h-hammer", "name": "DB Hammer Curl", "weightType": "standard",
+        "sets": 3, "reps": 11, "repRangeMin": 10, "repRangeMax": 12, "progressionType": "double_progression" },
+      { "id": "h-curl", "name": "DB Bicep Curl", "weightType": "standard",
+        "sets": 3, "reps": 11, "repRangeMin": 10, "repRangeMax": 12, "progressionType": "double_progression" },
+      { "id": "h-facepull", "name": "Band Facepull", "weightType": "noWeight",
+        "sets": 3, "reps": 17, "repRangeMin": 15, "repRangeMax": 20, "progressionType": "reps_only" }
+    ]
+  },
+  "savedExercises": []
+}

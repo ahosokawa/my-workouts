@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
@@ -19,6 +20,7 @@ export default function SettingsView() {
   const setRestNotifyMinutes = useStore((s) => s.setRestNotifyMinutes)
   const cloudSync = useStore((s) => s.cloudSync)
   const setCloudSync = useStore((s) => s.setCloudSync)
+  const switchProgram = useStore((s) => s.switchProgram)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
@@ -34,6 +36,7 @@ export default function SettingsView() {
   const [setupError, setSetupError] = useState<string | null>(null)
   const [syncingNow, setSyncingNow] = useState(false)
   const [showDisableSync, setShowDisableSync] = useState(false)
+  const [pendingProgram, setPendingProgram] = useState<ProgramTypeT | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -109,8 +112,23 @@ export default function SettingsView() {
   }
 
   const liftDay = (day: number) => {
+    if (profile?.programType === ProgramType.Hypertrophy) {
+      const names: Record<number, string> = {
+        1: 'Lower — Squat Focus',
+        2: 'Upper — Push Focus',
+        3: 'Lower — Hinge Focus',
+        4: 'Upper — Pull Focus',
+      }
+      return names[day] ?? 'Unknown'
+    }
     const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Overhead Press' }
     return names[day] ?? 'Unknown'
+  }
+
+  function handleProgramSwitch() {
+    if (!pendingProgram) return
+    switchProgram(pendingProgram)
+    setPendingProgram(null)
   }
 
   async function handleShareBackup() {
@@ -202,10 +220,35 @@ export default function SettingsView() {
         </div>
       </Section>
 
+      {/* Program */}
+      <Section title="Program">
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Training Program</span>
+          <div className="flex gap-1">
+            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => {
+                  if (p === (profile.programType ?? ProgramType.FiveThreeOne)) return
+                  setPendingProgram(p)
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  (profile.programType ?? ProgramType.FiveThreeOne) === p
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'bg-[#38383a] text-[#8e8e93]'
+                }`}
+              >
+                {p === ProgramType.FiveThreeOne ? '5/3/1' : 'Hypertrophy'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Section>
+
       {/* Current Cycle */}
       <Section title="Current Cycle">
         <Row label="Cycle" value={String(profile.cycleNumber)} />
-        <Row label="Week" value={`${profile.currentWeek} of 3`} />
+        <Row label="Week" value={`${profile.currentWeek} of ${profile.cycleWeeks ?? 3}`} />
         <Row label="Day" value={`${profile.currentDay} – ${liftDay(profile.currentDay)}`} />
       </Section>
 
@@ -569,6 +612,15 @@ export default function SettingsView() {
           onCancel={() => { setShowImportAlert(false); setImportJson('') }}
           confirmLabel="Import"
           destructive
+        />
+      )}
+      {pendingProgram && (
+        <Alert
+          title={`Switch to ${pendingProgram === ProgramType.Hypertrophy ? 'Hypertrophy' : '5/3/1'}?`}
+          message="This will reset your cycle position and replace your day-by-day plan with the new program's defaults. Workout history is preserved."
+          onConfirm={handleProgramSwitch}
+          onCancel={() => setPendingProgram(null)}
+          confirmLabel="Switch"
         />
       )}
     </div>

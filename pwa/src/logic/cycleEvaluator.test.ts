@@ -121,6 +121,8 @@ describe('suggestedTMs', () => {
     bodyWeightLbs: 180,
     bodyWeightLastUpdated: null,
     createdAt: '2025-01-01',
+    programType: '531',
+    cycleWeeks: 3,
   }
 
   it('increases squat/deadlift by 10, bench/OHP by 5 on success', () => {

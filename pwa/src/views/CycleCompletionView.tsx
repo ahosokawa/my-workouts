@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, DeloadType, displayRound, toStorageLbs } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs } from '../types'
 import type { AccessoryExercise, SupplementalOverride } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
+import { mainLiftForDay } from '../logic/hypertrophyCalculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function CycleCompletionView() {
@@ -21,6 +22,8 @@ export default function CycleCompletionView() {
   if (!profile) return null
 
   const units = profile.units ?? 'lbs'
+  const programType = profile.programType ?? ProgramType.FiveThreeOne
+  const isHypertrophy = programType === ProgramType.Hypertrophy
   const cycleResult = useMemo(
     () => evaluateCycle(sessions, setLogs, profile.cycleNumber),
     [sessions, setLogs, profile.cycleNumber],
@@ -30,6 +33,25 @@ export default function CycleCompletionView() {
     () => suggestedTMs(profile, cycleResult),
     [profile, cycleResult],
   )
+
+  // Hypertrophy: per-lift top-set delta over the just-completed cycle. Compares the first
+  // top-set entry of the cycle with the latest, for each main lift that has a top set.
+  const topSetDelta = (() => {
+    if (!isHypertrophy) return null
+    const m: Partial<Record<MainLift, { first: number; last: number }>> = {}
+    for (const lift of MAIN_LIFTS) {
+      if (!mainLiftForDay(programType, lift)) continue  // skip Friday (no main)
+      const cycleLogs = setLogs
+        .filter(
+          (l) => l.exerciseName === liftDisplayName(lift) && l.isMainLift && l.isAMRAP && l.isCompleted && l.actualReps != null,
+        )
+        .sort((a, b) => (a.completedAt ?? '').localeCompare(b.completedAt ?? ''))
+        .filter((l) => sessions.find((s) => s.id === l.sessionId)?.cycleNumber === profile.cycleNumber)
+      if (cycleLogs.length === 0) continue
+      m[lift] = { first: cycleLogs[0].weight, last: cycleLogs[cycleLogs.length - 1].weight }
+    }
+    return m
+  })()
 
   const [editedTMs, setEditedTMs] = useState<Record<number, string>>(() => {
     const m: Record<number, string> = {}
@@ -123,48 +145,72 @@ export default function CycleCompletionView() {
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold mb-1">Cycle {profile.cycleNumber} Complete</h1>
         <p className="text-sm text-[#8e8e93]">
-          {cycleResult.isSuccessful
-            ? 'All AMRAP targets met! Training maxes will increase.'
-            : 'Some AMRAP targets were not met. Review and adjust your training maxes.'}
+          {isHypertrophy
+            ? 'Review top-set progress, adjust TMs, and decide on a deload before the next block.'
+            : cycleResult.isSuccessful
+              ? 'All AMRAP targets met! Training maxes will increase.'
+              : 'Some AMRAP targets were not met. Review and adjust your training maxes.'}
         </p>
       </div>
 
       {/* Lift-by-lift results */}
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
-          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Results</h2>
+          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">
+            {isHypertrophy ? 'Top-Set Progress' : 'Results'}
+          </h2>
         </div>
         <div className="px-4 pb-3 divide-y divide-[#38383a]">
-          {MAIN_LIFTS.map((lift) => {
-            const result = cycleResult.liftResults[lift]
-            const amrapPassed = result && result.amrapMet
-            return (
-              <div key={lift} className="py-3">
-                <div className="flex items-center gap-2">
-                  <span className={`text-lg ${amrapPassed ? 'text-[var(--color-green)]' : 'text-[var(--color-orange)]'}`}>
-                    {amrapPassed ? '✓' : '!'}
-                  </span>
-                  <span className="font-medium text-sm">{liftDisplayName(lift)}</span>
-                </div>
-                {result && (
-                  <div className="ml-7 mt-1 text-xs text-[#8e8e93]">
-                    {result.allMainSetsCompleted ? 'All sets completed' : 'Not all sets completed'}
-                    {' · '}
-                    {result.amrapMet ? 'AMRAP targets met' : 'AMRAP targets not met'}
+          {isHypertrophy
+            ? MAIN_LIFTS.map((lift) => {
+                const data = topSetDelta?.[lift]
+                if (!data) return null
+                const delta = data.last - data.first
+                const positive = delta > 0
+                return (
+                  <div key={lift} className="py-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{liftDisplayName(lift)}</span>
+                      <span className={`text-sm tabular-nums ${positive ? 'text-[var(--color-green)]' : delta < 0 ? 'text-[var(--color-red)]' : 'text-[#8e8e93]'}`}>
+                        {displayRound(data.first, units)} → {displayRound(data.last, units)} {units}
+                        {delta !== 0 && (
+                          <span className="ml-1">({positive ? '+' : ''}{displayRound(delta, units)})</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
-                )}
-                {result?.amrapDetails.map((d, i) => (
-                  <div key={i} className="ml-7 text-[10px] text-[#8e8e93]">
-                    Week {d.week}: {displayRound(d.weight, units)} {units} x {d.actualReps} (min: {d.targetReps})
-                    {' '}
-                    <span className={d.metMinimum ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}>
-                      {d.metMinimum ? '✓' : '✗'}
-                    </span>
+                )
+              })
+            : MAIN_LIFTS.map((lift) => {
+                const result = cycleResult.liftResults[lift]
+                const amrapPassed = result && result.amrapMet
+                return (
+                  <div key={lift} className="py-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-lg ${amrapPassed ? 'text-[var(--color-green)]' : 'text-[var(--color-orange)]'}`}>
+                        {amrapPassed ? '✓' : '!'}
+                      </span>
+                      <span className="font-medium text-sm">{liftDisplayName(lift)}</span>
+                    </div>
+                    {result && (
+                      <div className="ml-7 mt-1 text-xs text-[#8e8e93]">
+                        {result.allMainSetsCompleted ? 'All sets completed' : 'Not all sets completed'}
+                        {' · '}
+                        {result.amrapMet ? 'AMRAP targets met' : 'AMRAP targets not met'}
+                      </div>
+                    )}
+                    {result?.amrapDetails.map((d, i) => (
+                      <div key={i} className="ml-7 text-[10px] text-[#8e8e93]">
+                        Week {d.week}: {displayRound(d.weight, units)} {units} x {d.actualReps} (min: {d.targetReps})
+                        {' '}
+                        <span className={d.metMinimum ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}>
+                          {d.metMinimum ? '✓' : '✗'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
-          })}
+                )
+              })}
         </div>
       </div>
 
@@ -239,7 +285,8 @@ export default function CycleCompletionView() {
         </div>
       </div>
 
-      {/* Next Cycle Program Variant */}
+      {/* Next Cycle Program Variant — 5/3/1 only */}
+      {!isHypertrophy && (
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Next Cycle Program</h2>
@@ -294,6 +341,7 @@ export default function CycleCompletionView() {
           })()}
         </div>
       </div>
+      )}
 
       {/* Day-by-Day Workout Plan: supplemental override + accessories per day */}
       <div className="mb-4">
@@ -304,6 +352,7 @@ export default function CycleCompletionView() {
           onSupplementalChange={setDaySupplemental}
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
+          programType={programType}
         />
       </div>
 

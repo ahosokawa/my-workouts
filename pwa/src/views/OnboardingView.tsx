@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useStore } from '../store'
-import { MAIN_LIFTS, ProgramVariant, PhaseType, toStorageLbs } from '../types'
-import type { AccessoryExercise, SupplementalOverride, Units } from '../types'
+import { MAIN_LIFTS, ProgramVariant, PhaseType, ProgramType, toStorageLbs } from '../types'
+import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
+import { getHypertrophyAccessories } from '../logic/accessories'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function OnboardingView() {
@@ -26,7 +27,8 @@ export default function OnboardingView() {
   const [tmPercentage, setTmPercentage] = useState<85 | 90>(90)
   const [sex, setSex] = useState<'male' | 'female'>('male')
 
-  // Step 2 state — variant selection
+  // Step 2 state — program & variant selection
+  const [selectedProgram, setSelectedProgram] = useState<ProgramTypeT>(ProgramType.FiveThreeOne)
   const [selectedVariant, setSelectedVariant] = useState<ProgramVariant>(ProgramVariant.BBB)
 
   // Step 3 state — accessories (empty by default)
@@ -37,6 +39,24 @@ export default function OnboardingView() {
     }
     return m
   })
+
+  // When the user picks a program in step 2, seed the day-by-day plan with that
+  // program's default accessories. For hypertrophy we also lock TM% to 85.
+  function pickProgram(program: ProgramTypeT) {
+    setSelectedProgram(program)
+    if (program === ProgramType.Hypertrophy) {
+      const m: Record<number, AccessoryExercise[]> = {}
+      for (const lift of MAIN_LIFTS) {
+        m[lift] = getHypertrophyAccessories(lift).map((ex) => ({ ...ex }))
+      }
+      setDayAccessories(m)
+      setTmPercentage(85)
+    } else {
+      const m: Record<number, AccessoryExercise[]> = {}
+      for (const lift of MAIN_LIFTS) m[lift] = []
+      setDayAccessories(m)
+    }
+  }
 
   // Step 3 state — supplemental overrides (empty by default)
   const [daySupplemental, setDaySupplemental] = useState<Record<number, SupplementalOverride>>({})
@@ -50,13 +70,17 @@ export default function OnboardingView() {
   }
 
   function handleStart() {
-    createProfile(values[0], values[1], values[2], values[3], selectedVariant, tmPercentage, sex, units)
+    createProfile(values[0], values[1], values[2], values[3], selectedVariant, tmPercentage, sex, units, selectedProgram)
     const bw = Number(bodyWeight)
     if (bw > 0) {
       updateProfile({ bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() })
     }
     setCustomAccessories(dayAccessories)
-    setCustomSupplemental(Object.keys(daySupplemental).length > 0 ? daySupplemental : null)
+    setCustomSupplemental(
+      selectedProgram === ProgramType.Hypertrophy
+        ? null
+        : (Object.keys(daySupplemental).length > 0 ? daySupplemental : null),
+    )
   }
 
   const fields = [
@@ -84,6 +108,7 @@ export default function OnboardingView() {
           onSupplementalChange={setDaySupplemental}
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
+          programType={selectedProgram}
         />
 
         <div className="flex-1 min-h-6" />
@@ -106,60 +131,103 @@ export default function OnboardingView() {
     )
   }
 
-  // ---- Step 2: Program Variant Selection ----
+  // ---- Step 2: Program Selection ----
   if (step === 2) {
+    const isHypertrophy = selectedProgram === ProgramType.Hypertrophy
     return (
       <div className="min-h-full flex flex-col p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold mb-2">Choose Your Program</h1>
           <p className="text-sm text-[#8e8e93]">
-            Pick a supplemental template for your first cycle. You can change this after each cycle.
+            Pick the training program you'll follow. You can switch later from Settings.
           </p>
         </div>
 
-        <div className="text-xs text-[var(--color-accent)] mb-3">
-          Suggested: Start with a Leader cycle
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
-            const config = getVariantConfig(v)
-            const isSelected = selectedVariant === v
-            const isSuggestedPhase = config.phase === PhaseType.Leader
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => {
+            const isSelected = selectedProgram === p
             return (
               <button
-                key={v}
-                onClick={() => setSelectedVariant(v)}
+                key={p}
+                onClick={() => pickProgram(p)}
                 className={`rounded-lg p-3 text-left transition-colors ${
                   isSelected
                     ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
-                    : isSuggestedPhase
-                      ? 'border border-[#48484a] bg-[#2c2c2e]'
-                      : 'border border-[#38383a] bg-[#1c1c1e]'
+                    : 'border border-[#38383a] bg-[#1c1c1e]'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold text-sm">{config.shortLabel}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
-                  }`}>
-                    {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
-                  </span>
+                <div className="font-semibold text-sm">
+                  {p === ProgramType.FiveThreeOne ? '5/3/1' : '4-Day Hypertrophy'}
                 </div>
-                <div className="text-xs text-[#8e8e93]">
-                  {config.supplementalSets}×{config.supplementalReps}
+                <div className="text-xs text-[#8e8e93] mt-1">
+                  {p === ProgramType.FiveThreeOne
+                    ? 'Top-set AMRAP percentages over 3-week cycles'
+                    : 'Top-set RPE 8 + double-progression accessories, 7-week cycles'}
                 </div>
               </button>
             )
           })}
         </div>
-        {(() => {
-          const config = getVariantConfig(selectedVariant)
-          return (
-            <div className="mt-3 text-xs text-[#8e8e93]">
-              {config.label} — {config.description}
+
+        {!isHypertrophy && (
+          <>
+            <h2 className="text-xs uppercase tracking-wider text-[#8e8e93] mt-2 mb-2">
+              Supplemental Variant
+            </h2>
+            <div className="text-xs text-[var(--color-accent)] mb-3">
+              Suggested: Start with a Leader cycle
             </div>
-          )
-        })()}
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
+                const config = getVariantConfig(v)
+                const isSelected = selectedVariant === v
+                const isSuggestedPhase = config.phase === PhaseType.Leader
+                return (
+                  <button
+                    key={v}
+                    onClick={() => setSelectedVariant(v)}
+                    className={`rounded-lg p-3 text-left transition-colors ${
+                      isSelected
+                        ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                        : isSuggestedPhase
+                          ? 'border border-[#48484a] bg-[#2c2c2e]'
+                          : 'border border-[#38383a] bg-[#1c1c1e]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm">{config.shortLabel}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
+                      }`}>
+                        {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-[#8e8e93]">
+                      {config.supplementalSets}×{config.supplementalReps}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            {(() => {
+              const config = getVariantConfig(selectedVariant)
+              return (
+                <div className="mt-3 text-xs text-[#8e8e93]">
+                  {config.label} — {config.description}
+                </div>
+              )
+            })()}
+          </>
+        )}
+
+        {isHypertrophy && (
+          <div className="bg-[#1c1c1e] rounded-xl p-4 text-xs text-[#8e8e93]">
+            <div className="text-white text-sm font-semibold mb-1">Hypertrophy notes</div>
+            Training maxes are computed at 85% of 1RM. Top set is autoregulated by RPE (cap at RPE 8 / 2 RIR).
+            Accessories run on double progression — when all sets hit the top of the range, the suggested weight bumps up.
+            Cardio days from the spec are not tracked here.
+          </div>
+        )}
 
         <div className="flex-1 min-h-6" />
 

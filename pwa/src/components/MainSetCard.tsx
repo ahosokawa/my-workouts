@@ -135,8 +135,19 @@ export default function MainSetCard({
         ) : null}
 
         {set.isAMRAP && isCompleted && <span className="text-base font-bold text-[var(--color-green)]">{amrapReps} reps</span>}
-        {set.isAMRAP && !isActive && !isCompleted && <span className="text-base">{set.targetReps}+ reps</span>}
+        {set.isAMRAP && !isActive && !isCompleted && (
+          <span className="text-base">
+            {set.repRangeMin !== undefined && set.repRangeMax !== undefined
+              ? `${set.repRangeMin}-${set.repRangeMax} reps`
+              : `${set.targetReps}+ reps`}
+          </span>
+        )}
       </div>
+      {set.isAMRAP && set.repRangeMin !== undefined && set.repRangeMax !== undefined && isActive && !isCompleted && (
+        <div className="ml-10 mt-0.5 text-xs text-[#8e8e93]">
+          Target: {set.repRangeMin}-{set.repRangeMax} reps · stop at RPE 8 (2 RIR)
+        </div>
+      )}
 
       {/* AMRAP stepper */}
       {set.isAMRAP && isActive && !isCompleted && (

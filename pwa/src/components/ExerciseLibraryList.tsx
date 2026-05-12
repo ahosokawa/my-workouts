@@ -52,8 +52,12 @@ function describeWeightType(weightType: AccessoryWeightType): string {
   }
 }
 
-/** Format an AccessoryExercise's secondary line as "{sets}x{reps} (Type)". */
+/** Format an AccessoryExercise's secondary line as "{sets}x{reps} (Type)" — or with a rep range when present. */
 export function accessorySecondary(ex: AccessoryExercise): string {
   const wt = describeWeightType(ex.weightType)
-  return `${ex.sets}x${ex.reps}${wt && wt !== 'Standard' ? ` (${wt === 'Bodyweight' ? 'BW' : wt === 'No Weight' ? 'no weight' : wt})` : ''}`
+  const reps =
+    ex.repRangeMin !== undefined && ex.repRangeMax !== undefined
+      ? `${ex.repRangeMin}-${ex.repRangeMax}`
+      : String(ex.reps)
+  return `${ex.sets}x${reps}${wt && wt !== 'Standard' ? ` (${wt === 'Bodyweight' ? 'BW' : wt === 'No Weight' ? 'no weight' : wt})` : ''}`
 }

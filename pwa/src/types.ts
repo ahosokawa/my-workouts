@@ -119,6 +119,23 @@ export const DeloadType = { TMTest: 'tm_test', Deload: 'deload' } as const
 export type DeloadType = (typeof DeloadType)[keyof typeof DeloadType]
 
 // ============================================================
+// Program Type (5/3/1 vs 4-Day Hypertrophy)
+// ============================================================
+
+export const ProgramType = { FiveThreeOne: '531', Hypertrophy: 'hypertrophy' } as const
+export type ProgramType = (typeof ProgramType)[keyof typeof ProgramType]
+
+/** Per-exercise progression strategy. Spec §5. */
+export const ProgressionType = {
+  Fixed: 'fixed',
+  Double: 'double_progression',
+  RepsThenLoad: 'reps_then_load',
+  RepsOnly: 'reps_only',
+  RomStages: 'rom_stages',
+} as const
+export type ProgressionType = (typeof ProgressionType)[keyof typeof ProgressionType]
+
+// ============================================================
 // Data Models
 // ============================================================
 
@@ -131,7 +148,7 @@ export interface UserProfile {
   benchTM: number
   deadliftTM: number
   pressTM: number
-  currentWeek: number   // 1-3
+  currentWeek: number   // 1-cycleWeeks
   currentDay: number    // 1-4
   cycleNumber: number
   isCycleComplete: boolean
@@ -147,6 +164,12 @@ export interface UserProfile {
   bodyWeightLbs: number | null
   bodyWeightLastUpdated: string | null  // ISO date
   createdAt: string                     // ISO date
+  // Program selection (added later — existing profiles migrate to '531' / 3)
+  programType: ProgramType
+  cycleWeeks: number  // 3 for 5/3/1, 7 for hypertrophy (default)
+  // Current top-set weight (stored in lbs) per main lift for hypertrophy program.
+  // Drives next-session prescription; updated after each session via progression algo.
+  hypertrophyTopSets?: Partial<Record<MainLift, number>>
 }
 
 export interface WorkoutSession {
@@ -171,6 +194,8 @@ export interface SetLog {
   isAMRAP: boolean
   isCompleted: boolean
   completedAt: string | null  // ISO date
+  /** Reps-in-reserve self-report. 0/1/2/3 where 3 means "3 or more". Hypertrophy top sets only. */
+  rir?: number | null
 }
 
 export interface WilksEntry {
@@ -197,6 +222,9 @@ export interface PrescribedSet {
   isAMRAP: boolean
   isSupplemental: boolean  // 5x5 FSL sets after AMRAP
   weight: number
+  /** Hypertrophy: prescribed rep-range bounds for the top set (e.g. 5-6). Both undefined for 5/3/1. */
+  repRangeMin?: number
+  repRangeMax?: number
 }
 
 // ============================================================
@@ -211,10 +239,16 @@ export interface ExerciseDef {
   weightType: AccessoryWeightType
 }
 
-/** Accessory-specific exercise: an ExerciseDef plus sets/reps prescription. */
+/** Accessory-specific exercise: an ExerciseDef plus sets/reps prescription.
+ *  Optional `repRangeMin`/`repRangeMax` enable rep-range prescriptions (e.g. "8-10").
+ *  When absent, `reps` is the fixed target. `progressionType` drives autoprogression. */
 export interface AccessoryExercise extends ExerciseDef {
   sets: number
   reps: number
+  repRangeMin?: number
+  repRangeMax?: number
+  progressionType?: ProgressionType
+  notes?: string
 }
 
 /** Per-day override that swaps the supplemental lift for a different exercise.
