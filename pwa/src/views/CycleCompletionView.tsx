@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs } from '../types'
-import type { AccessoryExercise, SupplementalOverride } from '../types'
+import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs, toDisplayWeight } from '../types'
+import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
 import { mainLiftForDay } from '../logic/hypertrophyCalculator'
+import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
+import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function CycleCompletionView() {
@@ -14,10 +16,13 @@ export default function CycleCompletionView() {
   const updateProfile = useStore((s) => s.updateProfile)
   const startNewCycle = useStore((s) => s.startNewCycle)
   const startDeload = useStore((s) => s.startDeload)
+  const switchProgram = useStore((s) => s.switchProgram)
   const customAccessories = useStore((s) => s.customAccessories)
   const setCustomAccessories = useStore((s) => s.setCustomAccessories)
   const customSupplemental = useStore((s) => s.customSupplemental)
   const setCustomSupplemental = useStore((s) => s.setCustomSupplemental)
+  const programAccessoryArchive = useStore((s) => s.programAccessoryArchive)
+  const programSupplementalArchive = useStore((s) => s.programSupplementalArchive)
 
   if (!profile) return null
 
@@ -65,6 +70,9 @@ export default function CycleCompletionView() {
     () => profile.currentVariant ?? 'fsl',
   )
 
+  const [selectedProgramType, setSelectedProgramType] = useState<ProgramTypeT>(programType)
+  const selectedIsHypertrophy = selectedProgramType === ProgramType.Hypertrophy
+
   const [bodyWeight, setBodyWeight] = useState(() =>
     profile.bodyWeightLbs && profile.bodyWeightLbs > 0
       ? String(displayRound(profile.bodyWeightLbs, units))
@@ -101,6 +109,76 @@ export default function CycleCompletionView() {
 
   const [deloadOption, setDeloadOption] = useState<'deload' | 'tm_test' | 'skip'>('deload')
 
+  // When the user picks a different program for the next cycle, reload TMs, accessories, and
+  // supplemental from the right source. Per-program memory: for the original program, restore
+  // the persisted state (customAccessories, customSupplemental, suggested TMs); for the other
+  // program, use its archive if present, else hard-coded defaults.
+  // Note: in-flight edits made while toggled are not preserved across toggles — decide on the
+  // program first, then edit the plan.
+  const prevSelectedRef = useRef(selectedProgramType)
+  useEffect(() => {
+    const prev = prevSelectedRef.current
+    if (prev === selectedProgramType) return
+    prevSelectedRef.current = selectedProgramType
+
+    if (selectedProgramType === programType) {
+      // Toggled back to the original program — restore the suggested TMs (with progression bonus).
+      setEditedTMs({
+        [MainLift.Squat]: String(displayRound(suggested[MainLift.Squat], units)),
+        [MainLift.BenchPress]: String(displayRound(suggested[MainLift.BenchPress], units)),
+        [MainLift.Deadlift]: String(displayRound(suggested[MainLift.Deadlift], units)),
+        [MainLift.ShoulderPress]: String(displayRound(suggested[MainLift.ShoulderPress], units)),
+      })
+    } else {
+      // Different program — recompute TMs from 1RM × new program's TM percentage.
+      const pct = selectedProgramType === ProgramType.Hypertrophy ? 85 : (profile!.tmPercentage ?? 90)
+      const tmFor = (rmLbs: number) => roundWeight(toDisplayWeight(rmLbs, units) * (pct / 100), units)
+      setEditedTMs({
+        [MainLift.Squat]: String(tmFor(profile!.squatOneRepMax)),
+        [MainLift.BenchPress]: String(tmFor(profile!.benchOneRepMax)),
+        [MainLift.Deadlift]: String(tmFor(profile!.deadliftOneRepMax)),
+        [MainLift.ShoulderPress]: String(tmFor(profile!.pressOneRepMax)),
+      })
+    }
+
+    const accessories: Record<number, AccessoryExercise[]> = {}
+    const source =
+      selectedProgramType === programType
+        ? customAccessories
+        : programAccessoryArchive[selectedProgramType]
+    for (const lift of MAIN_LIFTS) {
+      if (source?.[lift]) {
+        accessories[lift] = source[lift].map((ex) => ({ ...ex }))
+      } else {
+        const defaults = selectedProgramType === ProgramType.Hypertrophy
+          ? getHypertrophyAccessories(lift)
+          : getAccessories(lift)
+        accessories[lift] = defaults.map((ex) => ({ ...ex }))
+      }
+    }
+    setDayAccessories(accessories)
+
+    // Supplemental overrides only apply to 5/3/1.
+    if (selectedProgramType === ProgramType.Hypertrophy) {
+      setDaySupplemental({})
+    } else {
+      const suppSource =
+        selectedProgramType === programType
+          ? customSupplemental
+          : programSupplementalArchive[selectedProgramType]
+      const m: Record<number, SupplementalOverride> = {}
+      if (suppSource) {
+        for (const k of Object.keys(suppSource)) {
+          const lift = Number(k)
+          const existing = suppSource[lift]
+          if (existing) m[lift] = { ...existing, exercise: { ...existing.exercise } }
+        }
+      }
+      setDaySupplemental(m)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProgramType])
+
   const tmMap: Record<number, number> = {
     [MainLift.Squat]: displayRound(profile.squatTM, units),
     [MainLift.BenchPress]: displayRound(profile.benchTM, units),
@@ -128,6 +206,12 @@ export default function CycleCompletionView() {
   }
 
   function handleStart() {
+    // If the user picked a different program for the next cycle, flip the program first.
+    // switchProgram resets cycle position and seeds new defaults — applyTMsAndAccessories then
+    // overrides those defaults with the user's edits.
+    if (selectedProgramType !== programType) {
+      switchProgram(selectedProgramType)
+    }
     applyTMsAndAccessories()
 
     if (deloadOption === 'skip') {
@@ -240,6 +324,91 @@ export default function CycleCompletionView() {
         </div>
       </div>
 
+      {/* Next Cycle Program */}
+      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
+        <div className="px-4 pt-3 pb-1">
+          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Next Cycle Program</h2>
+        </div>
+        <div className="px-4 pb-3">
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => {
+              const isSelected = selectedProgramType === p
+              return (
+                <button
+                  key={p}
+                  onClick={() => setSelectedProgramType(p)}
+                  className={`rounded-lg p-3 text-left transition-colors ${
+                    isSelected
+                      ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                      : 'border border-[#38383a] bg-[#1c1c1e]'
+                  }`}
+                >
+                  <div className="font-semibold text-sm">
+                    {p === ProgramType.FiveThreeOne ? '5/3/1' : '4-Day Hypertrophy'}
+                  </div>
+                  <div className="text-xs text-[#8e8e93] mt-1">
+                    {p === ProgramType.FiveThreeOne
+                      ? 'Top-set AMRAP percentages over 3-week cycles'
+                      : 'RPE-8 top sets + double progression, 7-week cycles'}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {!selectedIsHypertrophy && (
+            <>
+              <div className="text-xs text-[var(--color-accent)] mb-2">
+                {suggestedPhase === PhaseType.Anchor
+                  ? `Suggested: Switch to an Anchor — you've completed ${profile.leaderCycleCount ?? 0} Leader cycle${(profile.leaderCycleCount ?? 0) !== 1 ? 's' : ''}`
+                  : (profile.anchorCycleCount ?? 0) >= 1
+                    ? `Suggested: Switch to a Leader — you've completed ${profile.anchorCycleCount ?? 0} Anchor cycle${(profile.anchorCycleCount ?? 0) !== 1 ? 's' : ''}`
+                    : 'Suggested: Start with a Leader cycle'}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
+                  const config = getVariantConfig(v)
+                  const isSelected = selectedVariant === v
+                  const isSuggestedPhase = config.phase === suggestedPhase
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => setSelectedVariant(v)}
+                      className={`rounded-lg p-3 text-left transition-colors ${
+                        isSelected
+                          ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
+                          : isSuggestedPhase
+                            ? 'border border-[#48484a] bg-[#2c2c2e]'
+                            : 'border border-[#38383a] bg-[#1c1c1e]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">{config.shortLabel}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
+                        }`}>
+                          {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-[#8e8e93]">
+                        {config.supplementalSets}×{config.supplementalReps}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {(() => {
+                const config = getVariantConfig(selectedVariant)
+                return (
+                  <div className="mt-3 text-xs text-[#8e8e93]">
+                    {config.label} — {config.description}
+                  </div>
+                )
+              })()}
+            </>
+          )}
+        </div>
+      </div>
+
       {/* New Training Maxes */}
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
@@ -285,64 +454,6 @@ export default function CycleCompletionView() {
         </div>
       </div>
 
-      {/* Next Cycle Program Variant — 5/3/1 only */}
-      {!isHypertrophy && (
-      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
-        <div className="px-4 pt-3 pb-1">
-          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Next Cycle Program</h2>
-        </div>
-        <div className="px-4 pb-3">
-          <div className="text-xs text-[var(--color-accent)] mb-3">
-            {suggestedPhase === PhaseType.Anchor
-              ? `Suggested: Switch to an Anchor — you've completed ${profile.leaderCycleCount ?? 0} Leader cycle${(profile.leaderCycleCount ?? 0) !== 1 ? 's' : ''}`
-              : (profile.anchorCycleCount ?? 0) >= 1
-                ? `Suggested: Switch to a Leader — you've completed ${profile.anchorCycleCount ?? 0} Anchor cycle${(profile.anchorCycleCount ?? 0) !== 1 ? 's' : ''}`
-                : 'Suggested: Start with a Leader cycle'}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(Object.values(ProgramVariant) as ProgramVariant[]).map((v) => {
-              const config = getVariantConfig(v)
-              const isSelected = selectedVariant === v
-              const isSuggestedPhase = config.phase === suggestedPhase
-              return (
-                <button
-                  key={v}
-                  onClick={() => setSelectedVariant(v)}
-                  className={`rounded-lg p-3 text-left transition-colors ${
-                    isSelected
-                      ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
-                      : isSuggestedPhase
-                        ? 'border border-[#48484a] bg-[#2c2c2e]'
-                        : 'border border-[#38383a] bg-[#1c1c1e]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm">{config.shortLabel}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      config.phase === PhaseType.Leader ? 'bg-[#3a3a3c] text-[#8e8e93]' : 'bg-[#1c3a5e] text-[var(--color-accent)]'
-                    }`}>
-                      {config.phase === PhaseType.Leader ? 'Leader' : 'Anchor'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-[#8e8e93]">
-                    {config.supplementalSets}×{config.supplementalReps}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          {(() => {
-            const config = getVariantConfig(selectedVariant)
-            return (
-              <div className="mt-3 text-xs text-[#8e8e93]">
-                {config.label} — {config.description}
-              </div>
-            )
-          })()}
-        </div>
-      </div>
-      )}
-
       {/* Day-by-Day Workout Plan: supplemental override + accessories per day */}
       <div className="mb-4">
         <WorkoutPlanEditor
@@ -352,7 +463,7 @@ export default function CycleCompletionView() {
           onSupplementalChange={setDaySupplemental}
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
-          programType={programType}
+          programType={selectedProgramType}
         />
       </div>
 

@@ -68,6 +68,12 @@ interface AppState {
   activeWorkout: ActiveWorkout
   customAccessories: Record<number, AccessoryExercise[]> | null  // keyed by MainLift value
   customSupplemental: Record<number, SupplementalOverride> | null  // keyed by MainLift; missing key = use main lift
+  // Per-program memory: each program keeps its own last-saved customizations so switching
+  // programs (in Settings or at cycle completion) restores that program's edits instead
+  // of wiping them. The current program's edits live in customAccessories/customSupplemental;
+  // the OTHER program's last-known edits live here, keyed by ProgramType.
+  programAccessoryArchive: Partial<Record<ProgramType, Record<number, AccessoryExercise[]>>>
+  programSupplementalArchive: Partial<Record<ProgramType, Record<number, SupplementalOverride>>>
   savedExercises: ExerciseDef[]  // user's exercise library (identity only — sets/reps are per-use)
   restNotifyEnabled: boolean
   restNotifyMinutes: number
@@ -138,6 +144,8 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
   }
   if (state.customAccessories === undefined) state.customAccessories = null
   if (state.customSupplemental === undefined) state.customSupplemental = null
+  if (!state.programAccessoryArchive || typeof state.programAccessoryArchive !== 'object') state.programAccessoryArchive = {}
+  if (!state.programSupplementalArchive || typeof state.programSupplementalArchive !== 'object') state.programSupplementalArchive = {}
   if (!Array.isArray(state.savedExercises)) state.savedExercises = []
 
   // Normalize the exercise library to context-free ExerciseDef and union in any
@@ -203,6 +211,8 @@ export const useStore = create<AppState>()(
       activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
       customAccessories: null,
       customSupplemental: null,
+      programAccessoryArchive: {},
+      programSupplementalArchive: {},
       savedExercises: [],
       restNotifyEnabled: true,
       restNotifyMinutes: 3,
@@ -395,8 +405,40 @@ export const useStore = create<AppState>()(
       },
 
       switchProgram: (programType) => {
-        const { profile } = get()
+        const { profile, customAccessories, customSupplemental, programAccessoryArchive, programSupplementalArchive } = get()
         if (!profile) return
+        const oldProgram = profile.programType ?? PT.FiveThreeOne
+        // Archive the OLD program's current customizations so they're restored next time the
+        // user switches back. The archive is keyed by program, so each program remembers its
+        // own state across switches.
+        const nextAccessoryArchive: Partial<Record<ProgramType, Record<number, AccessoryExercise[]>>> = {
+          ...programAccessoryArchive,
+        }
+        if (customAccessories) nextAccessoryArchive[oldProgram] = customAccessories
+        const nextSupplementalArchive: Partial<Record<ProgramType, Record<number, SupplementalOverride>>> = {
+          ...programSupplementalArchive,
+        }
+        if (customSupplemental) nextSupplementalArchive[oldProgram] = customSupplemental
+        // Restore the NEW program's archived state, falling back to defaults on first encounter.
+        const archivedAccessories = nextAccessoryArchive[programType]
+        const nextAccessories: Record<number, AccessoryExercise[]> = {}
+        for (const lift of MAIN_LIFTS) {
+          if (archivedAccessories?.[lift]) {
+            nextAccessories[lift] = archivedAccessories[lift].map((ex) => ({ ...ex }))
+          } else {
+            const defaults = programType === PT.Hypertrophy
+              ? getHypertrophyAccessories(lift)
+              : getAccessories(lift)
+            nextAccessories[lift] = defaults.map((ex) => ({ ...ex }))
+          }
+        }
+        // Supplemental overrides only apply to 5/3/1; hypertrophy has no supplemental.
+        const nextSupplemental =
+          programType === PT.Hypertrophy ? null : (nextSupplementalArchive[programType] ?? null)
+        // Once the new program's archive has been consumed, clear it so a later switch back
+        // doesn't restore stale data — fresh edits will repopulate it.
+        delete nextAccessoryArchive[programType]
+        delete nextSupplementalArchive[programType]
         // tmPercentage convention: hypertrophy = 85, 5/3/1 preserves current (default 90).
         const newTmPct: 85 | 90 = programType === PT.Hypertrophy ? 85 : profile.tmPercentage
         const u = profile.units ?? 'lbs'
@@ -415,14 +457,6 @@ export const useStore = create<AppState>()(
                 3: toStorageLbs(roundWeight(toDisplayWeight(dlTM, u) * 0.85, u), u),
               }
             : undefined
-        // Replace accessories with the new program's defaults.
-        const accessories: Record<number, AccessoryExercise[]> = {}
-        for (const lift of MAIN_LIFTS) {
-          const defaults = programType === PT.Hypertrophy
-            ? getHypertrophyAccessories(lift)
-            : getAccessories(lift)
-          accessories[lift] = defaults.map((ex) => ({ ...ex }))
-        }
         set({
           profile: {
             ...profile,
@@ -441,8 +475,10 @@ export const useStore = create<AppState>()(
             deloadDay: 1,
             hypertrophyTopSets,
           },
-          customAccessories: accessories,
-          customSupplemental: null,
+          customAccessories: nextAccessories,
+          customSupplemental: nextSupplemental,
+          programAccessoryArchive: nextAccessoryArchive,
+          programSupplementalArchive: nextSupplementalArchive,
         })
       },
 

@@ -26,6 +26,7 @@ export default function SettingsView() {
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
   const [manualWeight, setManualWeight] = useState('')
   const [showResetCycle, setShowResetCycle] = useState(false)
+  const [showEndCycle, setShowEndCycle] = useState(false)
   const [showResetAll, setShowResetAll] = useState(false)
   const [showImportAlert, setShowImportAlert] = useState(false)
   const [importJson, setImportJson] = useState('')
@@ -104,6 +105,11 @@ export default function SettingsView() {
   function handleResetCycle() {
     updateProfile({ currentWeek: 1, currentDay: 1, isCycleComplete: false })
     setShowResetCycle(false)
+  }
+
+  function handleEndCycle() {
+    updateProfile({ isCycleComplete: true })
+    setShowEndCycle(false)
   }
 
   function handleResetAll() {
@@ -558,6 +564,11 @@ export default function SettingsView() {
         <button onClick={() => setShowResetCycle(true)} className="w-full text-left py-2 text-sm text-[var(--color-orange)]">
           Reset Cycle to Week 1 Day 1
         </button>
+        {!profile.isCycleComplete && (
+          <button onClick={() => setShowEndCycle(true)} className="w-full text-left py-2 text-sm text-[var(--color-orange)]">
+            End Cycle Early
+          </button>
+        )}
         <button onClick={() => setShowResetAll(true)} className="w-full text-left py-2 text-sm text-[var(--color-red)]">
           Reset All Data
         </button>
@@ -572,6 +583,15 @@ export default function SettingsView() {
           onCancel={() => setShowResetCycle(false)}
           confirmLabel="Reset"
           destructive
+        />
+      )}
+      {showEndCycle && (
+        <Alert
+          title="End Cycle Early?"
+          message="Cycle results will reflect only the workouts you've logged so far. Training maxes are not changed until you confirm them on the next screen."
+          onConfirm={handleEndCycle}
+          onCancel={() => setShowEndCycle(false)}
+          confirmLabel="End Cycle"
         />
       )}
       {showResetAll && (
