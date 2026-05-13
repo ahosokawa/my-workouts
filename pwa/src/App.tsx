@@ -12,6 +12,7 @@ import PRsView from './views/PRsView'
 import E1RMChartView from './views/E1RMChartView'
 import SettingsView from './views/SettingsView'
 import DeloadWorkoutView from './views/DeloadWorkoutView'
+import UpcomingWorkoutsView from './views/UpcomingWorkoutsView'
 
 export default function App() {
   const profile = useStore((s) => s.profile)
@@ -50,6 +51,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
           <Route path="/workout" element={profile.isDeloading ? <DeloadWorkoutView /> : <WorkoutView />} />
+          <Route path="/upcoming" element={<UpcomingWorkoutsView />} />
           <Route path="/history" element={<HistoryView />} />
           <Route path="/history/:sessionId" element={<WorkoutDetailView />} />
           <Route path="/prs" element={<PRsView />} />

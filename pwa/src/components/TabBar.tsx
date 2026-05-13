@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom'
-import { DumbbellIcon, ClockIcon, TrophyIcon, GearIcon } from './Icons'
+import { DumbbellIcon, CalendarIcon, ClockIcon, TrophyIcon, GearIcon } from './Icons'
 
 const tabs = [
   { to: '/workout', label: 'Workout', Icon: DumbbellIcon },
+  { to: '/upcoming', label: 'Upcoming', Icon: CalendarIcon },
   { to: '/history', label: 'History', Icon: ClockIcon },
   { to: '/prs', label: 'PRs', Icon: TrophyIcon },
   { to: '/settings', label: 'Settings', Icon: GearIcon },
