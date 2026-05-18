@@ -16,7 +16,8 @@ import { roundWeight } from '../logic/calculator'
 import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
 import { hypertrophyDayLabel, dayHasTopSetMain } from '../logic/hypertrophyCalculator'
 import ExerciseDefFields from './ExerciseDefFields'
-import ExerciseLibraryList, { accessorySecondary } from './ExerciseLibraryList'
+import ExerciseLibraryList from './ExerciseLibraryList'
+import { accessorySecondary } from './exerciseFormat'
 
 interface WorkoutPlanEditorProps {
   accessories: Record<number, AccessoryExercise[]>

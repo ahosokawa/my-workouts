@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
-import type { AccessoryExercise } from '../types'
+import type { AccessoryExercise, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, hypertrophyDayLabel } from '../logic/hypertrophyCalculator'
@@ -21,6 +21,11 @@ import { useElapsedTimer } from '../hooks/useElapsedTimer'
 
 export default function WorkoutView() {
   const profile = useStore((s) => s.profile)
+  if (!profile) return null
+  return <WorkoutViewInner profile={profile} />
+}
+
+function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const setLogs = useStore((s) => s.setLogs)
   const saveWorkout = useStore((s) => s.saveWorkout)
   const advanceDay = useStore((s) => s.advanceDay)
@@ -38,7 +43,6 @@ export default function WorkoutView() {
   // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
   const [topSetRir, setTopSetRir] = useState<number | null>(null)
 
-  if (!profile) return null
   const programType = profile.programType ?? ProgramType.FiveThreeOne
   const isHypertrophy = programType === ProgramType.Hypertrophy
   const lift = mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
@@ -47,8 +51,6 @@ export default function WorkoutView() {
   // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.
   // The accessories list is keyed by the MainLift slot — Day 4 uses MainLift.ShoulderPress as the slot.
   const accessoriesSlot = lift ?? 4
-
-  if (!lift && !isHypertrophy) return null  // 5/3/1 always needs a lift
 
   const units = profile.units ?? 'lbs'
   const tm = lift ? useStore.getState().getTrainingMax(lift) : 0
@@ -147,8 +149,7 @@ export default function WorkoutView() {
       }
       const last = setLogs
         .filter((l) => l.exerciseName === ex.name && !l.isMainLift && l.isCompleted && l.weight > 0)
-        .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
-        [0]
+        .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))[0]
 
       if (ex.weightType === AccessoryWeightType.Bodyweight) {
         if (profile?.bodyWeightLbs && profile.bodyWeightLbs > 0) return String(displayRound(profile.bodyWeightLbs, units))
@@ -172,8 +173,7 @@ export default function WorkoutView() {
       }
       const last = setLogs
         .filter((l) => l.exerciseName === ex.name && !l.isMainLift && l.isCompleted)
-        .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
-        [0]
+        .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))[0]
       return last ? String(last.targetReps) : String(ex.reps)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -496,6 +496,8 @@ export default function WorkoutView() {
     aw.isActive && done ? <span className="text-xs text-[var(--color-green)]">✓ {count}/{count}</span> : undefined
 
   // ---- Render ----
+  // 5/3/1 always needs a lift; hypertrophy day 4 (Pull Focus) has no top-set main.
+  if (!lift && !isHypertrophy) return null
   return (
     <div className="p-4 pb-2 space-y-4">
       {/* Header */}

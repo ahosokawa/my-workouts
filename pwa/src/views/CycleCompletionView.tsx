@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs, toDisplayWeight } from '../types'
-import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride } from '../types'
+import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
 import { mainLiftForDay } from '../logic/hypertrophyCalculator'
@@ -11,6 +11,11 @@ import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 
 export default function CycleCompletionView() {
   const profile = useStore((s) => s.profile)
+  if (!profile) return null
+  return <CycleCompletionViewInner profile={profile} />
+}
+
+function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
   const sessions = useStore((s) => s.sessions)
   const setLogs = useStore((s) => s.setLogs)
   const updateProfile = useStore((s) => s.updateProfile)
@@ -23,8 +28,6 @@ export default function CycleCompletionView() {
   const setCustomSupplemental = useStore((s) => s.setCustomSupplemental)
   const programAccessoryArchive = useStore((s) => s.programAccessoryArchive)
   const programSupplementalArchive = useStore((s) => s.programSupplementalArchive)
-
-  if (!profile) return null
 
   const units = profile.units ?? 'lbs'
   const programType = profile.programType ?? ProgramType.FiveThreeOne
