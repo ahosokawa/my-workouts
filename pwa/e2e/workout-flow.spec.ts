@@ -111,3 +111,61 @@ test.describe('Active workout persistence', () => {
     await expect(page.getByRole('button', { name: 'Mark incomplete' }).first()).toBeVisible()
   })
 })
+
+test.describe('Reorder the week', () => {
+  test('picking a lift switches the prescription and persists across reload', async ({ page }) => {
+    // mid-cycle-bbb.json is week 1 / day 1 — a fresh week, no days done yet.
+    await loadFixtureOnce(page, 'mid-cycle-bbb.json', '/')
+
+    // Defaults to the first lift of the week, with the next-workout picker shown.
+    await expect(page.getByText('Week 1: Squat')).toBeVisible()
+    await expect(page.getByText('Up next — pick a lift')).toBeVisible()
+
+    // Switch the next workout to Bench Press (day 2).
+    await page.getByRole('button', { name: 'BP', exact: true }).click()
+    await expect(page.getByText('Week 1: Bench Press')).toBeVisible()
+    await expect(page.getByText(/Day 2 of 4/)).toBeVisible()
+
+    // The selection is persisted — it survives a reload.
+    await page.reload()
+    await expect(page.getByText('Week 1: Bench Press')).toBeVisible()
+  })
+
+  test('finishing a reordered workout marks it done and auto-advances within the week', async ({ page }) => {
+    await loadFixture(page, 'mid-cycle-bbb.json')
+    await page.goto('/')
+
+    // Start the week with Bench instead of Squat.
+    await page.getByRole('button', { name: 'BP', exact: true }).click()
+    await expect(page.getByText('Week 1: Bench Press')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Start Workout' }).click()
+    await expect(page.getByText('Elapsed')).toBeVisible()
+
+    // Complete every set (expanding auto-collapsed sections as needed).
+    while (true) {
+      const collapsed = page.locator('button[aria-expanded="false"]')
+      if ((await collapsed.count()) > 0) {
+        await collapsed.first().click()
+        await page.waitForTimeout(50)
+        continue
+      }
+      const markComplete = page.getByRole('button', { name: 'Mark complete' })
+      if ((await markComplete.count()) === 0) break
+      await markComplete.first().click()
+      await page.waitForTimeout(50)
+    }
+
+    await page.getByRole('button', { name: 'Finish Workout' }).click()
+    await page.getByRole('button', { name: 'Finish', exact: true }).click()
+
+    // The week did NOT roll over — still week 1. The next workout auto-selects
+    // the lowest remaining day (Squat, day 1).
+    await expect(page.getByText('Week 1: Squat')).toBeVisible()
+
+    // Bench is now marked done in the picker and can't be re-selected.
+    const benchChip = page.getByRole('button', { name: 'BP ✓' })
+    await expect(benchChip).toBeVisible()
+    await expect(benchChip).toBeDisabled()
+  })
+})

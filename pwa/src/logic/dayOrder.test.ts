@@ -62,17 +62,21 @@ describe('isValidDayOrder', () => {
 })
 
 describe('isCycleStart', () => {
-  it('is true only at week 1 / day 1 outside a deload', () => {
-    expect(isCycleStart({ currentWeek: 1, currentDay: 1, isDeloading: false })).toBe(true)
+  it('is true at week 1 with no days logged yet, outside a deload', () => {
+    expect(isCycleStart({ currentWeek: 1, completedDaysThisWeek: [], isDeloading: false })).toBe(true)
+  })
+
+  it('treats a missing completedDaysThisWeek (legacy) as no days logged', () => {
+    expect(isCycleStart({ currentWeek: 1, isDeloading: false })).toBe(true)
   })
 
   it('is false once any day of the cycle has been logged', () => {
-    expect(isCycleStart({ currentWeek: 1, currentDay: 2, isDeloading: false })).toBe(false)
-    expect(isCycleStart({ currentWeek: 2, currentDay: 1, isDeloading: false })).toBe(false)
+    expect(isCycleStart({ currentWeek: 1, completedDaysThisWeek: [1], isDeloading: false })).toBe(false)
+    expect(isCycleStart({ currentWeek: 2, completedDaysThisWeek: [], isDeloading: false })).toBe(false)
   })
 
   it('is false during a deload week', () => {
-    expect(isCycleStart({ currentWeek: 1, currentDay: 1, isDeloading: true })).toBe(false)
+    expect(isCycleStart({ currentWeek: 1, completedDaysThisWeek: [], isDeloading: true })).toBe(false)
   })
 })
 

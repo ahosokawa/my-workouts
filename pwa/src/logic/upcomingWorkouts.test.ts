@@ -46,7 +46,7 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
 
 describe('getUpcomingWorkouts — 5/3/1', () => {
   it('mid-cycle W1 D2 returns 10 entries starting at W1 D3 Deadlift', () => {
-    const profile = makeProfile({ currentWeek: 1, currentDay: 2 })
+    const profile = makeProfile({ currentWeek: 1, currentDay: 2, completedDaysThisWeek: [1] })
     const out = getUpcomingWorkouts(profile, null, null)
     expect(out).toHaveLength(10)
     expect(out[0].week).toBe(1)
@@ -63,7 +63,7 @@ describe('getUpcomingWorkouts — 5/3/1', () => {
   })
 
   it('last day W3 D4 returns []', () => {
-    const profile = makeProfile({ currentWeek: 3, currentDay: 4 })
+    const profile = makeProfile({ currentWeek: 3, currentDay: 4, completedDaysThisWeek: [1, 2, 3] })
     expect(getUpcomingWorkouts(profile, null, null)).toEqual([])
   })
 
@@ -121,7 +121,7 @@ describe('getUpcomingWorkouts — 5/3/1', () => {
     const custom: AccessoryExercise[] = [
       { id: 'x', name: 'Custom Squat Accessory', sets: 4, reps: 6, weightType: AccessoryWeightType.Standard },
     ]
-    const profile = makeProfile({ currentWeek: 1, currentDay: 4 }) // upcoming starts at W2 D1 = Squat
+    const profile = makeProfile({ currentWeek: 1, currentDay: 4 }) // W1 D4 selected; Squat (day 1) recurs W1–W3
     const customAccessories = { [MainLift.Squat]: custom }
     const out = getUpcomingWorkouts(profile, customAccessories, null)
     const squatDays = out.filter((w) => w.lift === MainLift.Squat)
@@ -135,12 +135,21 @@ describe('getUpcomingWorkouts — 5/3/1', () => {
     expect(benchDay?.accessories[0].name).not.toBe('Custom Squat Accessory')
   })
 
-  it('iteration boundary: W2 D4 → 4 entries all in W3', () => {
-    const profile = makeProfile({ currentWeek: 2, currentDay: 4 })
+  it('iteration boundary: W2 D4 (W2 fully done) → 4 entries all in W3', () => {
+    const profile = makeProfile({ currentWeek: 2, currentDay: 4, completedDaysThisWeek: [1, 2, 3] })
     const out = getUpcomingWorkouts(profile, null, null)
     expect(out).toHaveLength(4)
     expect(out.map((w) => w.week)).toEqual([3, 3, 3, 3])
     expect(out.map((w) => w.day)).toEqual([1, 2, 3, 4])
+  })
+
+  it('reordered week: D1 done, D3 selected — D2 and D4 still pending this week', () => {
+    const profile = makeProfile({ currentWeek: 1, currentDay: 3, completedDaysThisWeek: [1] })
+    const out = getUpcomingWorkouts(profile, null, null)
+    const w1 = out.filter((w) => w.week === 1)
+    expect(w1.map((w) => w.day)).toEqual([2, 4])
+    // 2 still-pending in W1 + 4 in W2 + 4 in W3
+    expect(out).toHaveLength(10)
   })
 })
 

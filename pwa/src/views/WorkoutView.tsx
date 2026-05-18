@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
-import type { AccessoryExercise, UserProfile } from '../types'
+import { liftDisplayName, liftShortName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import type { AccessoryExercise, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, hypertrophyDayLabel } from '../logic/hypertrophyCalculator'
@@ -19,6 +19,15 @@ import MainSetCard from '../components/MainSetCard'
 import CollapsibleSection from '../components/CollapsibleSection'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
 
+/** Short label for a next-workout picker chip. */
+function dayChipLabel(programType: ProgramType, day: number, dayOrder?: MainLift[]): string {
+  if (programType === ProgramType.Hypertrophy) {
+    return ['Squat', 'Push', 'Hinge', 'Pull'][day - 1] ?? `Day ${day}`
+  }
+  const lift = mainLiftForDay(programType, day, dayOrder)
+  return lift ? liftShortName(lift) : `Day ${day}`
+}
+
 export default function WorkoutView() {
   const profile = useStore((s) => s.profile)
   if (!profile) return null
@@ -34,6 +43,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const aw = useStore((s) => s.activeWorkout)
   const updateAW = useStore((s) => s.updateActiveWorkout)
   const clearAW = useStore((s) => s.clearActiveWorkout)
+  const selectNextWorkoutDay = useStore((s) => s.selectNextWorkoutDay)
   const customAccessories = useStore((s) => s.customAccessories)
   const customSupplemental = useStore((s) => s.customSupplemental)
 
@@ -496,6 +506,11 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     aw.isActive && done ? <span className="text-xs text-[var(--color-green)]">✓ {count}/{count}</span> : undefined
 
   // ---- Render ----
+  // Next-workout picker: any still-pending day of the current week can be started
+  // next. Shown only before the workout starts, and only when there's a real choice.
+  const completedDays = profile.completedDaysThisWeek ?? []
+  const showDayPicker = !aw.isActive && completedDays.length < 3
+
   // 5/3/1 always needs a lift; hypertrophy day 4 (Pull Focus) has no top-set main.
   if (!lift && !isHypertrophy) return null
   return (
@@ -522,6 +537,34 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             </div>
           )}
         </div>
+        {showDayPicker && (
+          <div className="mt-3">
+            <div className="text-xs text-[#8e8e93] mb-1.5">Up next — pick a lift</div>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4].map((d) => {
+                const done = completedDays.includes(d)
+                const selected = d === profile.currentDay
+                return (
+                  <button
+                    key={d}
+                    onClick={() => { if (!done && !selected) selectNextWorkoutDay(d) }}
+                    disabled={done}
+                    className={`flex-1 py-2 px-1 rounded-lg text-xs font-semibold ${
+                      selected
+                        ? 'bg-[var(--color-accent)] text-white'
+                        : done
+                          ? 'bg-[#2c2c2e] text-[#636366]'
+                          : 'bg-[#38383a] text-white'
+                    }`}
+                  >
+                    {dayChipLabel(programType, d, profile.dayOrder)}
+                    {done ? ' ✓' : ''}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {!aw.isActive && (
           <button
             onClick={startSession}

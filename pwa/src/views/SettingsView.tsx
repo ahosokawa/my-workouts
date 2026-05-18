@@ -110,7 +110,7 @@ export default function SettingsView() {
   }
 
   function handleResetCycle() {
-    updateProfile({ currentWeek: 1, currentDay: 1, isCycleComplete: false })
+    updateProfile({ currentWeek: 1, currentDay: 1, completedDaysThisWeek: [], isCycleComplete: false })
     setShowResetCycle(false)
   }
 

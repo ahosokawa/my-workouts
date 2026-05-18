@@ -79,16 +79,22 @@ export function isValidDayOrder(value: unknown): value is MainLift[] {
   return seen.size === MAIN_LIFTS.length && MAIN_LIFTS.every((l) => seen.has(l))
 }
 
-/** True when the current cycle hasn't started — week 1, day 1, not deloading.
- *  Day order is only safe to change at this boundary: reordering mid-cycle would
- *  change which lifts land in days not yet trained, skewing cycle evaluation
- *  (a lift could be trained twice or skipped within a week). */
+/** True when the current cycle hasn't started — week 1 with no days logged yet,
+ *  not deloading. Day order is only safe to change at this boundary: reordering
+ *  mid-cycle would change which lifts land in days not yet trained, skewing cycle
+ *  evaluation (a lift could be trained twice or skipped within a week).
+ *  Note: `currentDay` alone is no longer a reliable signal — with within-week
+ *  reordering it can be non-1 at a fresh cycle start. */
 export function isCycleStart(profile: {
   currentWeek: number
-  currentDay: number
+  completedDaysThisWeek?: number[]
   isDeloading: boolean
 }): boolean {
-  return !profile.isDeloading && profile.currentWeek === 1 && profile.currentDay === 1
+  return (
+    !profile.isDeloading &&
+    profile.currentWeek === 1 &&
+    (profile.completedDaysThisWeek?.length ?? 0) === 0
+  )
 }
 
 // ============================================================
@@ -200,6 +206,10 @@ export interface UserProfile {
   // Optional: legacy profiles migrate to DEFAULT_DAY_ORDER. Applies to 5/3/1 only;
   // hypertrophy days have fixed Lower/Upper-focus semantics and ignore this.
   dayOrder?: MainLift[]
+  // Day numbers (1–4) completed in the current week of the current cycle. Lets the
+  // week's 4 lifts be done in any order; reset to [] at each new week/cycle.
+  // Optional: legacy profiles migrate from currentDay (days before it were linear).
+  completedDaysThisWeek?: number[]
   // Current top-set weight (stored in lbs) per main lift for hypertrophy program.
   // Drives next-session prescription; updated after each session via progression algo.
   hypertrophyTopSets?: Partial<Record<MainLift, number>>

@@ -307,6 +307,26 @@ describe('mergePersistedState — day order migration', () => {
   })
 })
 
+describe('mergePersistedState — completed-days migration', () => {
+  it('derives completedDaysThisWeek from currentDay for a legacy profile (linear history)', () => {
+    // EXISTING_PROFILE is mid-week at currentDay 3 → days 1 and 2 were done.
+    const result = mergePersistedState({ profile: EXISTING_PROFILE }, currentState())
+    expect(result.profile!.completedDaysThisWeek).toEqual([1, 2])
+  })
+
+  it('yields an empty list when a legacy profile is at day 1', () => {
+    const persisted = { profile: { ...EXISTING_PROFILE, currentDay: 1 } }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.profile!.completedDaysThisWeek).toEqual([])
+  })
+
+  it('preserves an existing completedDaysThisWeek', () => {
+    const persisted = { profile: { ...EXISTING_PROFILE, completedDaysThisWeek: [2] } }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.profile!.completedDaysThisWeek).toEqual([2])
+  })
+})
+
 describe('mergePersistedState — notification defaults', () => {
   it('adds notification defaults for existing user without them', () => {
     const persisted = {

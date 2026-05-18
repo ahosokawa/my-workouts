@@ -121,19 +121,14 @@ export function getUpcomingWorkouts(
 
   const cycleWeeks = profile.cycleWeeks ?? 3
   const DAYS_PER_WEEK = 4
-
-  let day = profile.currentDay + 1
-  let week = profile.currentWeek
-  if (day > DAYS_PER_WEEK) {
-    day = 1
-    week += 1
-  }
-  if (week > cycleWeeks) return []
+  const completed = new Set(profile.completedDaysThisWeek ?? [])
 
   const out: UpcomingWorkout[] = []
-  for (let w = week; w <= cycleWeeks; w++) {
-    const startDay = w === week ? day : 1
-    for (let d = startDay; d <= DAYS_PER_WEEK; d++) {
+  for (let w = profile.currentWeek; w <= cycleWeeks; w++) {
+    for (let d = 1; d <= DAYS_PER_WEEK; d++) {
+      // Current week: skip the selected next workout and any already-done day.
+      // Within-week reordering means a still-pending day can sit below currentDay.
+      if (w === profile.currentWeek && (d === profile.currentDay || completed.has(d))) continue
       out.push(buildOne(profile, w, d, customAccessories, customSupplemental))
     }
   }

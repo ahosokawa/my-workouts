@@ -5,6 +5,7 @@ import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, to
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
 import { getAccessories, getHypertrophyAccessories } from './logic/accessories'
+import { computeWeekAdvance, remainingDays } from './logic/weekOrder'
 
 // ============================================================
 // Helpers
@@ -84,6 +85,7 @@ interface AppState {
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: () => boolean  // returns true if cycle completed
+  selectNextWorkoutDay: (day: number) => void  // pick any remaining day of the current week
   startNewCycle: (variant?: ProgramVariant) => void
   startDeload: (deloadType: DeloadType) => void
   advanceDeloadDay: () => void
@@ -191,6 +193,11 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
     if (!state.profile.programType) updates.programType = PT.FiveThreeOne
     if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
     if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]
+    if (!Array.isArray(state.profile.completedDaysThisWeek)) {
+      // Pre-feature completion was strictly linear, so days before currentDay are done.
+      const cd = state.profile.currentDay ?? 1
+      updates.completedDaysThisWeek = Array.from({ length: Math.max(0, cd - 1) }, (_, i) => i + 1)
+    }
     if (Object.keys(updates).length > 0) {
       state.profile = { ...state.profile, ...updates }
     }
@@ -271,6 +278,7 @@ export const useStore = create<AppState>()(
           programType: program,
           cycleWeeks: program === PT.Hypertrophy ? 7 : 3,
           dayOrder: [...MAIN_LIFTS],
+          completedDaysThisWeek: [],
           hypertrophyTopSets,
         }
         set({ profile })
@@ -304,32 +312,33 @@ export const useStore = create<AppState>()(
         const { profile } = get()
         if (!profile) return false
 
-        let { currentDay, currentWeek } = profile
-        currentDay++
-
-        if (currentDay > 4) {
-          currentDay = 1
-          currentWeek++
-        }
-
-        const cycleLength = profile.cycleWeeks ?? 3
-        if (currentWeek > cycleLength) {
-          // Cycle complete
-          set({
-            profile: {
-              ...profile,
-              currentDay,
-              currentWeek,
-              isCycleComplete: true,
-            },
-          })
-          return true
-        }
+        // Mark the just-finished day done; the week rolls over only once all 4
+        // of its days are complete — in whatever order they were done.
+        const result = computeWeekAdvance({
+          completedDaysThisWeek: profile.completedDaysThisWeek ?? [],
+          finishedDay: profile.currentDay,
+          currentWeek: profile.currentWeek,
+          cycleWeeks: profile.cycleWeeks ?? 3,
+        })
 
         set({
-          profile: { ...profile, currentDay, currentWeek },
+          profile: {
+            ...profile,
+            currentDay: result.currentDay,
+            currentWeek: result.currentWeek,
+            completedDaysThisWeek: result.completedDaysThisWeek,
+            isCycleComplete: result.isCycleComplete,
+          },
         })
-        return false
+        return result.isCycleComplete
+      },
+
+      selectNextWorkoutDay: (day) => {
+        const { profile } = get()
+        if (!profile) return
+        // Only a day that's still pending this week can be selected as next.
+        if (!remainingDays(profile.completedDaysThisWeek ?? []).includes(day)) return
+        set({ profile: { ...profile, currentDay: day } })
       },
 
       startNewCycle: (variant?: ProgramVariant) => {
@@ -365,6 +374,7 @@ export const useStore = create<AppState>()(
             ...profile,
             currentWeek: 1,
             currentDay: 1,
+            completedDaysThisWeek: [],
             cycleNumber: profile.cycleNumber + 1,
             isCycleComplete: false,
             currentVariant: newVariant,
@@ -471,6 +481,7 @@ export const useStore = create<AppState>()(
             pressTM: prTM,
             currentWeek: 1,
             currentDay: 1,
+            completedDaysThisWeek: [],
             isCycleComplete: false,
             isDeloading: false,
             deloadType: null,
