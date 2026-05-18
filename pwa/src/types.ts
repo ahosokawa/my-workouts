@@ -79,6 +79,18 @@ export function isValidDayOrder(value: unknown): value is MainLift[] {
   return seen.size === MAIN_LIFTS.length && MAIN_LIFTS.every((l) => seen.has(l))
 }
 
+/** True when the current cycle hasn't started — week 1, day 1, not deloading.
+ *  Day order is only safe to change at this boundary: reordering mid-cycle would
+ *  change which lifts land in days not yet trained, skewing cycle evaluation
+ *  (a lift could be trained twice or skipped within a week). */
+export function isCycleStart(profile: {
+  currentWeek: number
+  currentDay: number
+  isDeloading: boolean
+}): boolean {
+  return !profile.isDeloading && profile.currentWeek === 1 && profile.currentDay === 1
+}
+
 // ============================================================
 // Units
 // ============================================================

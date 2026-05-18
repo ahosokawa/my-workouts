@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
+import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
 import { syncOnce } from '../logic/syncManager'
@@ -52,6 +53,9 @@ export default function SettingsView() {
   const units = profile.units ?? 'lbs'
   const isHypertrophy = (profile.programType ?? ProgramType.FiveThreeOne) === ProgramType.Hypertrophy
   const dayOrder = profile.dayOrder ?? DEFAULT_DAY_ORDER
+  // Day order may only be changed at a cycle boundary (week 1 / day 1, no active
+  // workout). Reordering mid-cycle would skew which lifts the cycle evaluates.
+  const canReorderDays = isCycleStart(profile) && !workoutActive
   const tmMap: Record<number, number> = {
     [MainLift.Squat]: displayRound(profile.squatTM, units),
     [MainLift.BenchPress]: displayRound(profile.benchTM, units),
@@ -132,14 +136,6 @@ export default function SettingsView() {
     }
     const lift = liftFromDay(day, dayOrder)
     return lift ? liftDisplayName(lift) : 'Unknown'
-  }
-
-  function moveDay(index: number, delta: number) {
-    const next = [...dayOrder]
-    const j = index + delta
-    if (j < 0 || j >= next.length) return
-    ;[next[index], next[j]] = [next[j], next[index]]
-    updateProfile({ dayOrder: next })
   }
 
   function handleProgramSwitch() {
@@ -262,44 +258,19 @@ export default function SettingsView() {
         </div>
       </Section>
 
-      {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics) */}
+      {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics).
+          Editable only at a cycle boundary; otherwise set it on the cycle-completion screen. */}
       {!isHypertrophy && (
-        <Section title="Workout Day Order">
-          <div className="py-2 text-xs text-[#8e8e93]">
-            Reorder the main lifts across your training week. Applies to upcoming workouts.
-          </div>
-          {dayOrder.map((lift, i) => (
-            <div key={lift} className="flex items-center justify-between py-2">
-              <div>
-                <div className="text-sm font-medium">Day {i + 1}</div>
-                <div className="text-xs text-[#8e8e93]">{liftDisplayName(lift)}</div>
-              </div>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => moveDay(i, -1)}
-                  disabled={i === 0 || workoutActive}
-                  aria-label={`Move ${liftDisplayName(lift)} earlier`}
-                  className="w-9 h-9 rounded-lg bg-[#38383a] text-base font-semibold disabled:opacity-30"
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => moveDay(i, 1)}
-                  disabled={i === dayOrder.length - 1 || workoutActive}
-                  aria-label={`Move ${liftDisplayName(lift)} later`}
-                  className="w-9 h-9 rounded-lg bg-[#38383a] text-base font-semibold disabled:opacity-30"
-                >
-                  ↓
-                </button>
-              </div>
-            </div>
-          ))}
-          {workoutActive && (
-            <div className="py-2 text-xs text-[var(--color-orange)]">
-              Finish your active workout before reordering.
-            </div>
-          )}
-        </Section>
+        <DayOrderEditor
+          dayOrder={dayOrder}
+          onChange={(next) => updateProfile({ dayOrder: next })}
+          disabled={!canReorderDays}
+          note={
+            workoutActive
+              ? 'Finish your active workout before reordering.'
+              : 'Day order can only be changed at the start of a cycle. Adjust it when setting up your next cycle.'
+          }
+        />
       )}
 
       {/* Current Cycle */}

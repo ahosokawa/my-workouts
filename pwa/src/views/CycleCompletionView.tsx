@@ -8,6 +8,7 @@ import { mainLiftForDay } from '../logic/hypertrophyCalculator'
 import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
+import DayOrderEditor from '../components/DayOrderEditor'
 
 export default function CycleCompletionView() {
   const profile = useStore((s) => s.profile)
@@ -75,6 +76,10 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
 
   const [selectedProgramType, setSelectedProgramType] = useState<ProgramTypeT>(programType)
   const selectedIsHypertrophy = selectedProgramType === ProgramType.Hypertrophy
+
+  // Day order for the next cycle (5/3/1 only). Persisted on Start; takes effect
+  // when the next cycle begins fresh at week 1 / day 1.
+  const [dayOrder, setDayOrder] = useState<MainLift[]>(() => [...(profile.dayOrder ?? MAIN_LIFTS)])
 
   const [bodyWeight, setBodyWeight] = useState(() =>
     profile.bodyWeightLbs && profile.bodyWeightLbs > 0
@@ -202,6 +207,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       benchTM: bp,
       deadliftTM: dl,
       pressTM: sp,
+      dayOrder,
       ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
     setCustomAccessories(dayAccessories)
@@ -457,6 +463,13 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
         </div>
       </div>
 
+      {/* Workout Day Order for the next cycle (5/3/1 only) */}
+      {!selectedIsHypertrophy && (
+        <div className="mb-4">
+          <DayOrderEditor dayOrder={dayOrder} onChange={setDayOrder} />
+        </div>
+      )}
+
       {/* Day-by-Day Workout Plan: supplemental override + accessories per day */}
       <div className="mb-4">
         <WorkoutPlanEditor
@@ -467,7 +480,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgramType}
-          dayOrder={selectedIsHypertrophy ? undefined : profile.dayOrder}
+          dayOrder={selectedIsHypertrophy ? undefined : dayOrder}
         />
       </div>
 
