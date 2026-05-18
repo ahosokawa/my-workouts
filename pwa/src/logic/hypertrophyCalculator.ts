@@ -71,10 +71,17 @@ export function dayHasTopSetMain(programType: ProgramType, day: number): boolean
   return liftFromDay(day) !== null
 }
 
-/** Program-aware version of `liftFromDay`. Returns null when the day has no top-set main. */
-export function mainLiftForDay(programType: ProgramType, day: number): MainLift | null {
+/** Program-aware version of `liftFromDay`. Returns null when the day has no top-set main.
+ *  For 5/3/1, `dayOrder` resolves the day against the user's custom lift order;
+ *  hypertrophy days have fixed Lower/Upper-focus semantics and ignore `dayOrder`. */
+export function mainLiftForDay(
+  programType: ProgramType,
+  day: number,
+  dayOrder?: readonly MainLift[],
+): MainLift | null {
   if (!dayHasTopSetMain(programType, day)) return null
-  return liftFromDay(day)
+  if (programType === PT.Hypertrophy) return liftFromDay(day)
+  return liftFromDay(day, dayOrder)
 }
 
 /** Spec day labels for hypertrophy (replaces "Day N — {LiftName}" headers). */

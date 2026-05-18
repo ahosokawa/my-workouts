@@ -464,6 +464,7 @@ export default function CycleCompletionView() {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgramType}
+          dayOrder={selectedIsHypertrophy ? undefined : profile.dayOrder}
         />
       </div>
 

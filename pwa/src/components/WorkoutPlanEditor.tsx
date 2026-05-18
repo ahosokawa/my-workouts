@@ -26,6 +26,7 @@ interface WorkoutPlanEditorProps {
   variantConfig: VariantConfig
   units: Units
   programType?: ProgramTypeT  // defaults to '531' for backwards-compat with existing callers
+  dayOrder?: readonly MainLift[]  // training-week lift order; defaults to MAIN_LIFTS
 }
 
 type AccessoryModal = { lift: MainLift } | null
@@ -49,6 +50,7 @@ export default function WorkoutPlanEditor({
   variantConfig,
   units,
   programType = ProgramType.FiveThreeOne,
+  dayOrder = MAIN_LIFTS,
 }: WorkoutPlanEditorProps) {
   const savedExercises = useStore((s) => s.savedExercises)
   const addSavedExercise = useStore((s) => s.addSavedExercise)
@@ -294,7 +296,7 @@ export default function WorkoutPlanEditor({
     <>
       <div className="space-y-3">
         <h2 className="text-xs uppercase tracking-wider text-[#8e8e93] px-1">Workout Plan by Day</h2>
-        {MAIN_LIFTS.map((lift, dayIndex) => {
+        {dayOrder.map((lift, dayIndex) => {
           const isExpanded = expandedDays.has(lift)
           const dayAccessories = accessories[lift] ?? []
           const override = supplemental[lift]

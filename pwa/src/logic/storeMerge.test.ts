@@ -263,6 +263,50 @@ describe('mergePersistedState — program type migration', () => {
   })
 })
 
+describe('mergePersistedState — day order migration', () => {
+  it('defaults dayOrder to the standard order for existing user without it', () => {
+    const persisted = { profile: EXISTING_PROFILE }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.dayOrder).toEqual([
+      MainLift.Squat,
+      MainLift.BenchPress,
+      MainLift.Deadlift,
+      MainLift.ShoulderPress,
+    ])
+  })
+
+  it('preserves a valid custom dayOrder', () => {
+    const custom = [MainLift.BenchPress, MainLift.Squat, MainLift.ShoulderPress, MainLift.Deadlift]
+    const persisted = { profile: { ...EXISTING_PROFILE, dayOrder: custom } }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.dayOrder).toEqual(custom)
+  })
+
+  it('resets a dayOrder with duplicates to the default', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, dayOrder: [1, 1, 2, 3] as MainLift[] },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.dayOrder).toEqual([...MAIN_LIFTS])
+  })
+
+  it('resets a wrong-length dayOrder to the default', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, dayOrder: [MainLift.Squat, MainLift.BenchPress] },
+    }
+
+    const result = mergePersistedState(persisted, currentState())
+
+    expect(result.profile!.dayOrder).toEqual([...MAIN_LIFTS])
+  })
+})
+
 describe('mergePersistedState — notification defaults', () => {
   it('adds notification defaults for existing user without them', () => {
     const persisted = {

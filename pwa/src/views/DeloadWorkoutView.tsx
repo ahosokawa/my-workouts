@@ -15,7 +15,7 @@ export default function DeloadWorkoutView() {
 
   if (!profile || !profile.deloadType) return null
 
-  const lift = liftFromDay(profile.deloadDay)
+  const lift = liftFromDay(profile.deloadDay, profile.dayOrder)
   if (!lift) return null
 
   const units = profile.units ?? 'lbs'
@@ -139,7 +139,7 @@ export default function DeloadWorkoutView() {
             <h3 className="font-semibold text-lg mb-2">Finish {typeLabel}?</h3>
             <p className="text-base text-[#8e8e93] mb-5">
               {profile.deloadDay < 4
-                ? `Moving to Day ${profile.deloadDay + 1}: ${liftDisplayName(liftFromDay(profile.deloadDay + 1)!)}`
+                ? `Moving to Day ${profile.deloadDay + 1}: ${liftDisplayName(liftFromDay(profile.deloadDay + 1, profile.dayOrder)!)}`
                 : 'This is the last deload day. You\'ll set up your next cycle after this.'}
             </p>
             <div className="flex gap-3">

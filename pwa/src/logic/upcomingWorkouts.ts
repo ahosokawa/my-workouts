@@ -50,7 +50,7 @@ function buildOne(
 ): UpcomingWorkout {
   const programType = profile.programType ?? ProgramType.FiveThreeOne
   const isHypertrophy = programType === ProgramType.Hypertrophy
-  const lift = mainLiftForDay(programType, day)
+  const lift = mainLiftForDay(programType, day, profile.dayOrder)
   const accessoriesSlot = lift ?? ML.ShoulderPress
 
   if (isHypertrophy) {

@@ -41,7 +41,7 @@ export default function WorkoutView() {
   if (!profile) return null
   const programType = profile.programType ?? ProgramType.FiveThreeOne
   const isHypertrophy = programType === ProgramType.Hypertrophy
-  const lift = mainLiftForDay(programType, profile.currentDay)
+  const lift = mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
 
   // Hypertrophy day 4 (Pull Focus) has no top-set main lift — we render only accessories.
   // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.

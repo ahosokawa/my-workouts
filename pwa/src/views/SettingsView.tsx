@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { requestNotificationPermission } from '../notifications'
@@ -21,6 +21,7 @@ export default function SettingsView() {
   const cloudSync = useStore((s) => s.cloudSync)
   const setCloudSync = useStore((s) => s.setCloudSync)
   const switchProgram = useStore((s) => s.switchProgram)
+  const workoutActive = useStore((s) => s.activeWorkout.isActive)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
@@ -49,6 +50,8 @@ export default function SettingsView() {
   if (!profile) return null
 
   const units = profile.units ?? 'lbs'
+  const isHypertrophy = (profile.programType ?? ProgramType.FiveThreeOne) === ProgramType.Hypertrophy
+  const dayOrder = profile.dayOrder ?? DEFAULT_DAY_ORDER
   const tmMap: Record<number, number> = {
     [MainLift.Squat]: displayRound(profile.squatTM, units),
     [MainLift.BenchPress]: displayRound(profile.benchTM, units),
@@ -127,8 +130,16 @@ export default function SettingsView() {
       }
       return names[day] ?? 'Unknown'
     }
-    const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Overhead Press' }
-    return names[day] ?? 'Unknown'
+    const lift = liftFromDay(day, dayOrder)
+    return lift ? liftDisplayName(lift) : 'Unknown'
+  }
+
+  function moveDay(index: number, delta: number) {
+    const next = [...dayOrder]
+    const j = index + delta
+    if (j < 0 || j >= next.length) return
+    ;[next[index], next[j]] = [next[j], next[index]]
+    updateProfile({ dayOrder: next })
   }
 
   function handleProgramSwitch() {
@@ -250,6 +261,46 @@ export default function SettingsView() {
           </div>
         </div>
       </Section>
+
+      {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics) */}
+      {!isHypertrophy && (
+        <Section title="Workout Day Order">
+          <div className="py-2 text-xs text-[#8e8e93]">
+            Reorder the main lifts across your training week. Applies to upcoming workouts.
+          </div>
+          {dayOrder.map((lift, i) => (
+            <div key={lift} className="flex items-center justify-between py-2">
+              <div>
+                <div className="text-sm font-medium">Day {i + 1}</div>
+                <div className="text-xs text-[#8e8e93]">{liftDisplayName(lift)}</div>
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => moveDay(i, -1)}
+                  disabled={i === 0 || workoutActive}
+                  aria-label={`Move ${liftDisplayName(lift)} earlier`}
+                  className="w-9 h-9 rounded-lg bg-[#38383a] text-base font-semibold disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => moveDay(i, 1)}
+                  disabled={i === dayOrder.length - 1 || workoutActive}
+                  aria-label={`Move ${liftDisplayName(lift)} later`}
+                  className="w-9 h-9 rounded-lg bg-[#38383a] text-base font-semibold disabled:opacity-30"
+                >
+                  ↓
+                </button>
+              </div>
+            </div>
+          ))}
+          {workoutActive && (
+            <div className="py-2 text-xs text-[var(--color-orange)]">
+              Finish your active workout before reordering.
+            </div>
+          )}
+        </Section>
+      )}
 
       {/* Current Cycle */}
       <Section title="Current Cycle">
