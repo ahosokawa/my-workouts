@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
+import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
 import { syncOnce } from '../logic/syncManager'
@@ -21,6 +22,7 @@ export default function SettingsView() {
   const cloudSync = useStore((s) => s.cloudSync)
   const setCloudSync = useStore((s) => s.setCloudSync)
   const switchProgram = useStore((s) => s.switchProgram)
+  const workoutActive = useStore((s) => s.activeWorkout.isActive)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editRMs, setEditRMs] = useState({ squat: '', bench: '', deadlift: '', press: '' })
@@ -49,6 +51,11 @@ export default function SettingsView() {
   if (!profile) return null
 
   const units = profile.units ?? 'lbs'
+  const isHypertrophy = (profile.programType ?? ProgramType.FiveThreeOne) === ProgramType.Hypertrophy
+  const dayOrder = profile.dayOrder ?? DEFAULT_DAY_ORDER
+  // Day order may only be changed at a cycle boundary (week 1 / day 1, no active
+  // workout). Reordering mid-cycle would skew which lifts the cycle evaluates.
+  const canReorderDays = isCycleStart(profile) && !workoutActive
   const tmMap: Record<number, number> = {
     [MainLift.Squat]: displayRound(profile.squatTM, units),
     [MainLift.BenchPress]: displayRound(profile.benchTM, units),
@@ -127,8 +134,8 @@ export default function SettingsView() {
       }
       return names[day] ?? 'Unknown'
     }
-    const names: Record<number, string> = { 1: 'Squat', 2: 'Bench Press', 3: 'Deadlift', 4: 'Overhead Press' }
-    return names[day] ?? 'Unknown'
+    const lift = liftFromDay(day, dayOrder)
+    return lift ? liftDisplayName(lift) : 'Unknown'
   }
 
   function handleProgramSwitch() {
@@ -250,6 +257,21 @@ export default function SettingsView() {
           </div>
         </div>
       </Section>
+
+      {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics).
+          Editable only at a cycle boundary; otherwise set it on the cycle-completion screen. */}
+      {!isHypertrophy && (
+        <DayOrderEditor
+          dayOrder={dayOrder}
+          onChange={(next) => updateProfile({ dayOrder: next })}
+          disabled={!canReorderDays}
+          note={
+            workoutActive
+              ? 'Finish your active workout before reordering.'
+              : 'Day order can only be changed at the start of a cycle. Adjust it when setting up your next cycle.'
+          }
+        />
+      )}
 
       {/* Current Cycle */}
       <Section title="Current Cycle">

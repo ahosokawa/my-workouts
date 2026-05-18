@@ -1,16 +1,22 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs, toDisplayWeight } from '../types'
-import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride } from '../types'
+import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
 import { mainLiftForDay } from '../logic/hypertrophyCalculator'
 import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
+import DayOrderEditor from '../components/DayOrderEditor'
 
 export default function CycleCompletionView() {
   const profile = useStore((s) => s.profile)
+  if (!profile) return null
+  return <CycleCompletionViewInner profile={profile} />
+}
+
+function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
   const sessions = useStore((s) => s.sessions)
   const setLogs = useStore((s) => s.setLogs)
   const updateProfile = useStore((s) => s.updateProfile)
@@ -23,8 +29,6 @@ export default function CycleCompletionView() {
   const setCustomSupplemental = useStore((s) => s.setCustomSupplemental)
   const programAccessoryArchive = useStore((s) => s.programAccessoryArchive)
   const programSupplementalArchive = useStore((s) => s.programSupplementalArchive)
-
-  if (!profile) return null
 
   const units = profile.units ?? 'lbs'
   const programType = profile.programType ?? ProgramType.FiveThreeOne
@@ -72,6 +76,10 @@ export default function CycleCompletionView() {
 
   const [selectedProgramType, setSelectedProgramType] = useState<ProgramTypeT>(programType)
   const selectedIsHypertrophy = selectedProgramType === ProgramType.Hypertrophy
+
+  // Day order for the next cycle (5/3/1 only). Persisted on Start; takes effect
+  // when the next cycle begins fresh at week 1 / day 1.
+  const [dayOrder, setDayOrder] = useState<MainLift[]>(() => [...(profile.dayOrder ?? MAIN_LIFTS)])
 
   const [bodyWeight, setBodyWeight] = useState(() =>
     profile.bodyWeightLbs && profile.bodyWeightLbs > 0
@@ -199,6 +207,7 @@ export default function CycleCompletionView() {
       benchTM: bp,
       deadliftTM: dl,
       pressTM: sp,
+      dayOrder,
       ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
     setCustomAccessories(dayAccessories)
@@ -454,6 +463,13 @@ export default function CycleCompletionView() {
         </div>
       </div>
 
+      {/* Workout Day Order for the next cycle (5/3/1 only) */}
+      {!selectedIsHypertrophy && (
+        <div className="mb-4">
+          <DayOrderEditor dayOrder={dayOrder} onChange={setDayOrder} />
+        </div>
+      )}
+
       {/* Day-by-Day Workout Plan: supplemental override + accessories per day */}
       <div className="mb-4">
         <WorkoutPlanEditor
@@ -464,6 +480,7 @@ export default function CycleCompletionView() {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgramType}
+          dayOrder={selectedIsHypertrophy ? undefined : dayOrder}
         />
       </div>
 

@@ -57,9 +57,38 @@ export function liftProgressionAmount(lift: MainLift, units: Units = 'lbs'): num
   }
 }
 
-export function liftFromDay(day: number): MainLift | null {
+/** Map a training-week day (1-based) to its main lift.
+ *  With `dayOrder` the day is resolved against the user's custom lift order;
+ *  without it, days map directly to lifts (Squat/Bench/Deadlift/OHP).
+ *  Note: callers passing a raw MainLift value (not a day) should omit `dayOrder`. */
+export function liftFromDay(day: number, dayOrder?: readonly MainLift[]): MainLift | null {
+  if (dayOrder) {
+    return day >= 1 && day <= dayOrder.length ? dayOrder[day - 1] : null
+  }
   if (day >= 1 && day <= 4) return day as MainLift
   return null
+}
+
+/** Default training-week order: Squat, Bench, Deadlift, Overhead Press. */
+export const DEFAULT_DAY_ORDER: readonly MainLift[] = MAIN_LIFTS
+
+/** True when `value` is a permutation of the four main lifts — a valid day order. */
+export function isValidDayOrder(value: unknown): value is MainLift[] {
+  if (!Array.isArray(value) || value.length !== MAIN_LIFTS.length) return false
+  const seen = new Set<unknown>(value)
+  return seen.size === MAIN_LIFTS.length && MAIN_LIFTS.every((l) => seen.has(l))
+}
+
+/** True when the current cycle hasn't started — week 1, day 1, not deloading.
+ *  Day order is only safe to change at this boundary: reordering mid-cycle would
+ *  change which lifts land in days not yet trained, skewing cycle evaluation
+ *  (a lift could be trained twice or skipped within a week). */
+export function isCycleStart(profile: {
+  currentWeek: number
+  currentDay: number
+  isDeloading: boolean
+}): boolean {
+  return !profile.isDeloading && profile.currentWeek === 1 && profile.currentDay === 1
 }
 
 // ============================================================
@@ -167,6 +196,10 @@ export interface UserProfile {
   // Program selection (added later — existing profiles migrate to '531' / 3)
   programType: ProgramType
   cycleWeeks: number  // 3 for 5/3/1, 7 for hypertrophy (default)
+  // Order of the 4 main lifts across the training week — a permutation of MAIN_LIFTS.
+  // Optional: legacy profiles migrate to DEFAULT_DAY_ORDER. Applies to 5/3/1 only;
+  // hypertrophy days have fixed Lower/Upper-focus semantics and ignore this.
+  dayOrder?: MainLift[]
   // Current top-set weight (stored in lbs) per main lift for hypertrophy program.
   // Drives next-session prescription; updated after each session via progression algo.
   hypertrophyTopSets?: Partial<Record<MainLift, number>>

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig, SupplementalOverride, ExerciseDef, ProgramType } from './types'
-import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight } from './types'
+import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight, isValidDayOrder } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
 import { getAccessories, getHypertrophyAccessories } from './logic/accessories'
@@ -190,6 +190,7 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
     if (state.profile.deloadDay === undefined) updates.deloadDay = 1
     if (!state.profile.programType) updates.programType = PT.FiveThreeOne
     if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
+    if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]
     if (Object.keys(updates).length > 0) {
       state.profile = { ...state.profile, ...updates }
     }
@@ -269,6 +270,7 @@ export const useStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           programType: program,
           cycleWeeks: program === PT.Hypertrophy ? 7 : 3,
+          dayOrder: [...MAIN_LIFTS],
           hypertrophyTopSets,
         }
         set({ profile })
@@ -590,7 +592,7 @@ export const useStore = create<AppState>()(
       getCurrentLift: () => {
         const { profile } = get()
         if (!profile) return null
-        return liftFromDay(profile.currentDay)
+        return liftFromDay(profile.currentDay, profile.dayOrder)
       },
     }),
     {

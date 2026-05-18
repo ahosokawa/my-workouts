@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { MAIN_LIFTS, ProgramVariant, PhaseType, ProgramType, toStorageLbs } from '../types'
-import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT } from '../types'
+import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT, MainLift } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { getHypertrophyAccessories } from '../logic/accessories'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
+import DayOrderEditor from '../components/DayOrderEditor'
 
 export default function OnboardingView() {
   const createProfile = useStore((s) => s.createProfile)
@@ -61,6 +62,9 @@ export default function OnboardingView() {
   // Step 3 state — supplemental overrides (empty by default)
   const [daySupplemental, setDaySupplemental] = useState<Record<number, SupplementalOverride>>({})
 
+  // Step 3 state — training-week lift order (5/3/1 only); defaults to the standard order
+  const [dayOrder, setDayOrder] = useState<MainLift[]>(() => [...MAIN_LIFTS])
+
   const values = [squat, bench, deadlift, press].map(Number)
   const allValid = values.every((v) => v > 0)
 
@@ -72,9 +76,10 @@ export default function OnboardingView() {
   function handleStart() {
     createProfile(values[0], values[1], values[2], values[3], selectedVariant, tmPercentage, sex, units, selectedProgram)
     const bw = Number(bodyWeight)
-    if (bw > 0) {
-      updateProfile({ bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() })
-    }
+    updateProfile({
+      dayOrder,
+      ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
+    })
     setCustomAccessories(dayAccessories)
     setCustomSupplemental(
       selectedProgram === ProgramType.Hypertrophy
@@ -101,6 +106,12 @@ export default function OnboardingView() {
           </p>
         </div>
 
+        {selectedProgram !== ProgramType.Hypertrophy && (
+          <div className="mb-4">
+            <DayOrderEditor dayOrder={dayOrder} onChange={setDayOrder} />
+          </div>
+        )}
+
         <WorkoutPlanEditor
           accessories={dayAccessories}
           onAccessoriesChange={setDayAccessories}
@@ -109,6 +120,7 @@ export default function OnboardingView() {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgram}
+          dayOrder={selectedProgram === ProgramType.Hypertrophy ? undefined : dayOrder}
         />
 
         <div className="flex-1 min-h-6" />

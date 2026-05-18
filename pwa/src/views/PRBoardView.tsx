@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useStore } from '../store'
 import { MAIN_LIFTS, liftDisplayName, liftShortName, displayRound } from '../types'
 import type { Units } from '../types'
@@ -5,6 +6,8 @@ import type { Units } from '../types'
 export default function PRBoardView() {
   const setLogs = useStore((s) => s.setLogs)
   const profile = useStore((s) => s.profile)
+  // Snapshot "one week ago" once at mount — used to highlight recent PRs.
+  const [oneWeekAgo] = useState(() => Date.now() - 7 * 24 * 60 * 60 * 1000)
   const units: Units = profile?.units ?? 'lbs'
   const completedMain = setLogs.filter((l) => l.isMainLift && l.isCompleted)
 
@@ -16,8 +19,6 @@ export default function PRBoardView() {
       </div>
     )
   }
-
-  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
 
   // Build data: { exerciseName -> { rep -> { weight, isRecent } } }
   const data: Record<string, Record<number, { weight: number; isRecent: boolean }>> = {}
