@@ -353,3 +353,74 @@ describe('mergePersistedState — notification defaults', () => {
     expect(result.restNotifyMinutes).toBe(5)
   })
 })
+
+describe('mergePersistedState — active workout day pin', () => {
+  // An activeWorkout persisted before the day/liftRawValue pin fields existed.
+  function prePinActiveWorkout(overrides: Record<string, unknown> = {}) {
+    return {
+      isActive: true,
+      startTime: 123,
+      completedMain: [],
+      completedAccessory: [],
+      amrapReps: 5,
+      accWeights: {},
+      accReps: {},
+      mainWeights: {},
+      mainReps: {},
+      lastSetTime: null,
+      showRestTimer: false,
+      ...overrides,
+    }
+  }
+
+  it('heals an in-progress workout with no pin to the profile position', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, currentDay: 2 },
+      activeWorkout: prePinActiveWorkout(),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.day).toBe(2)
+    // Default day order → day 2 is Bench Press.
+    expect(result.activeWorkout.liftRawValue).toBe(MainLift.BenchPress)
+  })
+
+  it('resolves the pinned lift through a custom day order', () => {
+    const custom = [MainLift.BenchPress, MainLift.Squat, MainLift.Deadlift, MainLift.ShoulderPress]
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, currentDay: 1, dayOrder: custom },
+      activeWorkout: prePinActiveWorkout(),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.day).toBe(1)
+    expect(result.activeWorkout.liftRawValue).toBe(MainLift.BenchPress)
+  })
+
+  it('leaves an inactive workout unpinned', () => {
+    const persisted = {
+      profile: EXISTING_PROFILE,
+      activeWorkout: prePinActiveWorkout({ isActive: false }),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.day).toBeNull()
+    expect(result.activeWorkout.liftRawValue).toBeNull()
+  })
+
+  it('preserves an already-pinned in-progress workout', () => {
+    const persisted = {
+      profile: { ...EXISTING_PROFILE, currentDay: 1 },
+      activeWorkout: prePinActiveWorkout({ day: 3, liftRawValue: MainLift.Deadlift }),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.day).toBe(3)
+    expect(result.activeWorkout.liftRawValue).toBe(MainLift.Deadlift)
+  })
+
+  it('does not crash healing an active workout with no profile', () => {
+    const persisted = {
+      profile: null,
+      activeWorkout: prePinActiveWorkout(),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.day).toBeNull()
+  })
+})

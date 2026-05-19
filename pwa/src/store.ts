@@ -6,6 +6,7 @@ import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
 import { getAccessories, getHypertrophyAccessories } from './logic/accessories'
 import { computeWeekAdvance, remainingDays } from './logic/weekOrder'
+import { mainLiftForDay } from './logic/hypertrophyCalculator'
 
 // ============================================================
 // Helpers
@@ -32,6 +33,12 @@ function trainingMax(profile: UserProfile, lift: MainLift): number {
 export interface ActiveWorkout {
   isActive: boolean
   startTime: number | null
+  // Identity of the workout in progress, pinned at startSession so a mid-session
+  // profile change (settings, cloud sync) can't silently re-point it to another lift.
+  // Both null when no workout is active. liftRawValue is the MainLift value (1-4),
+  // or 0 when the day has no top-set main lift (hypertrophy Pull day).
+  day: number | null
+  liftRawValue: number | null
   completedMain: number[]      // stored as array, used as Set in component
   completedAccessory: string[] // stored as array, used as Set in component
   amrapReps: number
@@ -46,6 +53,8 @@ export interface ActiveWorkout {
 const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
   isActive: false,
   startTime: null,
+  day: null,
+  liftRawValue: null,
   completedMain: [],
   completedAccessory: [],
   amrapReps: 0,
@@ -84,7 +93,7 @@ interface AppState {
   createProfile: (squatRM: number, benchRM: number, deadliftRM: number, pressRM: number, variant?: ProgramVariant, tmPercentage?: 85 | 90, sex?: 'male' | 'female', units?: Units, programType?: ProgramType) => void
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
-  advanceDay: () => boolean  // returns true if cycle completed
+  advanceDay: (finishedDay?: number) => boolean  // returns true if cycle completed
   selectNextWorkoutDay: (day: number) => void  // pick any remaining day of the current week
   startNewCycle: (variant?: ProgramVariant) => void
   startDeload: (deloadType: DeloadType) => void
@@ -202,6 +211,17 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
       state.profile = { ...state.profile, ...updates }
     }
   }
+
+  // Heal a workout that was already in progress before the day/lift pin fields
+  // existed: pin it to the profile's current position. Best-effort — it matches
+  // the pre-pin behavior and self-corrects on the next startSession.
+  if (state.activeWorkout.isActive && state.activeWorkout.day == null && state.profile) {
+    const pt = state.profile.programType ?? PT.FiveThreeOne
+    state.activeWorkout.day = state.profile.currentDay
+    state.activeWorkout.liftRawValue =
+      mainLiftForDay(pt, state.profile.currentDay, state.profile.dayOrder) ?? 0
+  }
+
   return state
 }
 
@@ -308,15 +328,17 @@ export const useStore = create<AppState>()(
         })
       },
 
-      advanceDay: () => {
+      advanceDay: (finishedDay) => {
         const { profile } = get()
         if (!profile) return false
 
         // Mark the just-finished day done; the week rolls over only once all 4
         // of its days are complete — in whatever order they were done.
+        // `finishedDay` is the day the active workout was pinned to; it falls
+        // back to currentDay for callers that don't track a pinned day.
         const result = computeWeekAdvance({
           completedDaysThisWeek: profile.completedDaysThisWeek ?? [],
-          finishedDay: profile.currentDay,
+          finishedDay: finishedDay ?? profile.currentDay,
           currentWeek: profile.currentWeek,
           cycleWeeks: profile.cycleWeeks ?? 3,
         })

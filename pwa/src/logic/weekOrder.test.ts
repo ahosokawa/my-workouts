@@ -91,4 +91,17 @@ describe('computeWeekAdvance', () => {
     expect(r.completedDaysThisWeek).toEqual([1, 2])
     expect(r.currentDay).toBe(3)
   })
+
+  it('marks the finished day done even when it is not the lowest remaining', () => {
+    // A pinned workout finished out of order: day 4 done before days 2 and 3.
+    const r = computeWeekAdvance({
+      completedDaysThisWeek: [1],
+      finishedDay: 4,
+      currentWeek: 1,
+      cycleWeeks: 3,
+    })
+    expect(r.completedDaysThisWeek).toEqual([1, 4])
+    expect(r.currentDay).toBe(2)
+    expect(r.currentWeek).toBe(1)
+  })
 })

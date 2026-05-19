@@ -168,4 +168,31 @@ test.describe('Reorder the week', () => {
     await expect(benchChip).toBeVisible()
     await expect(benchChip).toBeDisabled()
   })
+
+  test('an in-progress workout keeps its lift when the profile day drifts', async ({ page }) => {
+    // Fresh week (week 1 / day 1). Start the week with Bench instead of Squat.
+    await loadFixtureOnce(page, 'mid-cycle-bbb.json', '/')
+    await page.getByRole('button', { name: 'BP', exact: true }).click()
+    await expect(page.getByText('Week 1: Bench Press')).toBeVisible()
+
+    // Start the workout — its day + lift are pinned at this moment.
+    await page.getByRole('button', { name: 'Start Workout' }).click()
+    await expect(page.getByText('Elapsed')).toBeVisible()
+
+    // Simulate a mid-workout profile mutation (a cloud-sync pull or a Settings
+    // action) that moves currentDay back to day 1 (Squat). The in-progress
+    // activeWorkout is left untouched.
+    await page.evaluate(() => {
+      const data = JSON.parse(localStorage.getItem('my-workouts-storage')!)
+      data.state.profile.currentDay = 1
+      localStorage.setItem('my-workouts-storage', JSON.stringify(data))
+    })
+    await page.reload()
+
+    // The workout is still active AND still pinned to Bench Press — it did not
+    // silently re-point to Squat.
+    await expect(page.getByText('Elapsed')).toBeVisible()
+    await expect(page.getByText('Week 1: Bench Press')).toBeVisible()
+    await expect(page.getByText(/Day 2 of 4/)).toBeVisible()
+  })
 })

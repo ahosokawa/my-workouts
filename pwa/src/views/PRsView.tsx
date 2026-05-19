@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
-import { MainLift, MAIN_LIFTS, liftDisplayName, displayRound } from '../types'
-import { estimated1RM } from '../logic/brzycki'
+import { MAIN_LIFTS, liftDisplayName, displayRound } from '../types'
+import { bestAmrapE1RM } from '../logic/personalRecords'
 import { calculateWilks, formatWilks } from '../logic/wilks'
 import PRBoardView from './PRBoardView'
 
@@ -16,21 +16,10 @@ export default function PRsView() {
   const navigate = useNavigate()
   const units = profile?.units ?? 'lbs'
 
+  // Only used for the empty-state check; per-lift bests come from bestAmrapE1RM.
   const amrapLogs = setLogs.filter(
     (l) => l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
   )
-
-  function bestE1RM(lift: MainLift): { weight: number; reps: number; e1rm: number } | null {
-    let best: { weight: number; reps: number; e1rm: number } | null = null
-    for (const l of amrapLogs) {
-      if (l.exerciseName !== liftDisplayName(lift)) continue
-      const e = estimated1RM(l.weight, l.actualReps!)
-      if (e !== null && (best === null || e > best.e1rm)) {
-        best = { weight: l.weight, reps: l.actualReps!, e1rm: e }
-      }
-    }
-    return best
-  }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'e1rm', label: 'Est. 1RM' },
@@ -70,7 +59,7 @@ export default function PRsView() {
               </div>
               <div className="px-4 pb-3 divide-y divide-[#38383a]">
                 {MAIN_LIFTS.map((lift) => {
-                  const best = bestE1RM(lift)
+                  const best = bestAmrapE1RM(setLogs, lift)
                   return (
                     <div
                       key={lift}
@@ -102,7 +91,7 @@ export default function PRsView() {
               </div>
               <div className="px-4 pb-3 divide-y divide-[#38383a]">
                 {MAIN_LIFTS.map((lift) => {
-                  const best = bestE1RM(lift)
+                  const best = bestAmrapE1RM(setLogs, lift)
                   return (
                     <div key={lift} className="flex items-center gap-3 py-2">
                       <div className="flex-1">

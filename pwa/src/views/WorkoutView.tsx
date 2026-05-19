@@ -10,6 +10,7 @@ import {
   recentMainLiftTopSets, lastAccessorySession,
 } from '../logic/progression'
 import { estimated1RM } from '../logic/brzycki'
+import { bestAmrapE1RM } from '../logic/personalRecords'
 import { calculateWilks } from '../logic/wilks'
 import { barbellWeight } from '../logic/plates'
 import PlateBreakdown from '../components/PlateBreakdown'
@@ -55,7 +56,14 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const programType = profile.programType ?? ProgramType.FiveThreeOne
   const isHypertrophy = programType === ProgramType.Hypertrophy
-  const lift = mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
+  // While a workout is in progress its day + lift are pinned (captured in
+  // startSession) so a mid-session profile change — settings, cloud sync — can't
+  // silently re-point it to another lift. Before a workout starts, both follow
+  // the live profile so the day picker works.
+  const activeDay = aw.isActive ? (aw.day ?? profile.currentDay) : profile.currentDay
+  const lift: MainLift | null = aw.isActive
+    ? ((aw.liftRawValue ?? 0) > 0 ? (aw.liftRawValue as MainLift) : null)
+    : mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
 
   // Hypertrophy day 4 (Pull Focus) has no top-set main lift — we render only accessories.
   // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.
@@ -96,7 +104,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   // Reset collapsed state when workout identity changes (e.g. after finishing a workout)
   useEffect(() => {
     setCollapsedSections(new Set())
-  }, [profile.currentDay, profile.currentWeek, profile.cycleNumber])
+  }, [activeDay, profile.currentWeek, profile.cycleNumber])
 
   // Auto-collapse completed sections
   useEffect(() => {
@@ -190,19 +198,6 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     [setLogs, isHypertrophy],
   )
 
-  function currentBestE1RM(): number | null {
-    if (!lift) return null
-    const logs = setLogs.filter(
-      (l) => l.exerciseName === liftDisplayName(lift) && l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
-    )
-    let best: number | null = null
-    for (const l of logs) {
-      const e = estimated1RM(l.weight, l.actualReps!)
-      if (e !== null && (best === null || e > best)) best = e
-    }
-    return best
-  }
-
   // ---- Hypertrophy progression suggestions ----
 
   /** For the current main lift in hypertrophy mode, what does the algorithm
@@ -292,6 +287,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     updateAW({
       isActive: true,
       startTime: Date.now(),
+      day: profile.currentDay,
+      liftRawValue: lift ?? 0,
       amrapReps: startingReps,
       completedMain: [],
       completedAccessory: [],
@@ -491,13 +488,13 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       }
     }
 
-    advanceDay()
+    advanceDay(activeDay)
     clearAW()
     setShowFinishAlert(false)
   }
 
   const fmtElapsed = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
-  const bestE1RM = currentBestE1RM()
+  const bestE1RM = lift ? (bestAmrapE1RM(setLogs, lift)?.e1rm ?? null) : null
 
   const warmupWorkingComplete = warmupWorkingIndices.every(({ index }) => completedMain.has(index))
   const supplementalComplete = supplementalIndices.every(({ index }) => completedMain.has(index))
@@ -522,11 +519,11 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             <h1 className="text-xl font-bold">
               Week {profile.currentWeek}:{' '}
               {isHypertrophy
-                ? hypertrophyDayLabel(profile.currentDay)
+                ? hypertrophyDayLabel(activeDay)
                 : (lift ? liftDisplayName(lift) : '')}
             </h1>
             <p className="text-sm text-[#8e8e93]">
-              Cycle {profile.cycleNumber} · Day {profile.currentDay} of 4
+              Cycle {profile.cycleNumber} · Day {activeDay} of 4
               {isHypertrophy ? ' · Hypertrophy' : ` · ${variantConfig.shortLabel}`}
             </p>
           </div>
