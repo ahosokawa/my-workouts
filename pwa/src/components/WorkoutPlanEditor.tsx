@@ -13,8 +13,8 @@ import {
 import type { AccessoryExercise, ExerciseDef, SupplementalOverride, Units, ProgramType as ProgramTypeT, ProgressionType as ProgressionTypeT } from '../types'
 import type { VariantConfig } from '../logic/variants'
 import { roundWeight } from '../logic/calculator'
-import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
-import { hypertrophyDayLabel, dayHasTopSetMain } from '../logic/hypertrophyCalculator'
+import { getProgramAccessories } from '../logic/accessories'
+import { dayLabel, dayHasTopSetMain, usesTopSetEngine, UPPER_LOWER_DAY_ORDER } from '../logic/hypertrophyCalculator'
 import ExerciseDefFields from './ExerciseDefFields'
 import ExerciseLibraryList from './ExerciseLibraryList'
 import { accessorySecondary } from './exerciseFormat'
@@ -55,7 +55,10 @@ export default function WorkoutPlanEditor({
 }: WorkoutPlanEditorProps) {
   const savedExercises = useStore((s) => s.savedExercises)
   const addSavedExercise = useStore((s) => s.addSavedExercise)
-  const isHypertrophy = programType === ProgramType.Hypertrophy
+  const isTopSetProgram = usesTopSetEngine(programType)
+  // Upper/Lower trains in a fixed Bench→Squat→OHP→Deadlift order; other programs use the
+  // passed-in order (5/3/1) or the canonical MAIN_LIFTS default (hypertrophy).
+  const effectiveDayOrder = programType === ProgramType.UpperLower ? UPPER_LOWER_DAY_ORDER : dayOrder
 
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
 
@@ -98,7 +101,7 @@ export default function WorkoutPlanEditor({
     progressionType?: ProgressionTypeT
   } {
     const lower = name.toLowerCase()
-    const defs = isHypertrophy ? getHypertrophyAccessories(lift) : getAccessories(lift)
+    const defs = getProgramAccessories(programType, lift)
     for (const def of defs) {
       if (def.name.toLowerCase() === lower) return {
         sets: def.sets,
@@ -139,14 +142,14 @@ export default function WorkoutPlanEditor({
       for (const o of Object.values(supplemental)) {
         if (o) add(o.exercise)
       }
-      const defaults = isHypertrophy ? getHypertrophyAccessories(lift) : getAccessories(lift)
+      const defaults = getProgramAccessories(programType, lift)
       for (const ex of defaults) add(ex)
       return Array.from(map.values())
     }
     const m: Record<number, ExerciseDef[]> = {}
     for (const lift of MAIN_LIFTS) m[lift] = buildFor(lift)
     return m
-  }, [savedExercises, accessories, supplemental, isHypertrophy])
+  }, [savedExercises, accessories, supplemental, programType])
 
   // ---- Accessory helpers ----
 
@@ -188,7 +191,7 @@ export default function WorkoutPlanEditor({
     if (!name) return
     const minN = Number(accRepMin)
     const maxN = Number(accRepMax)
-    const hasRange = isHypertrophy && minN > 0 && maxN > 0 && maxN >= minN
+    const hasRange = isTopSetProgram && minN > 0 && maxN > 0 && maxN >= minN
     const newEx: AccessoryExercise = {
       id: generateId(),
       name,
@@ -196,7 +199,7 @@ export default function WorkoutPlanEditor({
       reps: Math.max(1, Number(accReps) || (hasRange ? minN : 10)),
       weightType: accWeightType,
       ...(hasRange ? { repRangeMin: minN, repRangeMax: maxN } : {}),
-      ...(isHypertrophy ? { progressionType: accProgressionType } : {}),
+      ...(isTopSetProgram ? { progressionType: accProgressionType } : {}),
     }
     onAccessoriesChange({
       ...accessories,
@@ -289,7 +292,7 @@ export default function WorkoutPlanEditor({
   }
 
   function dayHeaderLabel(lift: MainLift, dayIndex: number): string {
-    if (isHypertrophy) return hypertrophyDayLabel(dayIndex + 1)
+    if (isTopSetProgram) return dayLabel(programType, dayIndex + 1)
     return `Day ${dayIndex + 1} – ${liftDisplayName(lift)}`
   }
 
@@ -297,11 +300,11 @@ export default function WorkoutPlanEditor({
     <>
       <div className="space-y-3">
         <h2 className="text-xs uppercase tracking-wider text-[#8e8e93] px-1">Workout Plan by Day</h2>
-        {dayOrder.map((lift, dayIndex) => {
+        {effectiveDayOrder.map((lift, dayIndex) => {
           const isExpanded = expandedDays.has(lift)
           const dayAccessories = accessories[lift] ?? []
           const override = supplemental[lift]
-          const hasTopSet = !isHypertrophy || dayHasTopSetMain(programType, dayIndex + 1)
+          const hasTopSet = !isTopSetProgram || dayHasTopSetMain(programType, dayIndex + 1)
           return (
             <div key={lift} className="bg-[#1c1c1e] rounded-xl overflow-hidden">
               <button
@@ -313,7 +316,7 @@ export default function WorkoutPlanEditor({
                     {dayHeaderLabel(lift, dayIndex)}
                   </span>
                   <span className="text-xs text-[#8e8e93] ml-2">
-                    {isHypertrophy
+                    {isTopSetProgram
                       ? (hasTopSet ? `Top set: ${liftDisplayName(lift)}` : 'No top-set main')
                       : suppSummary(lift)}
                     {' · '}
@@ -328,7 +331,7 @@ export default function WorkoutPlanEditor({
               {isExpanded && (
                 <div className="px-4 pb-3 space-y-4">
                   {/* Supplemental (5/3/1 only) */}
-                  {!isHypertrophy && (
+                  {!isTopSetProgram && (
                   <div>
                     <h3 className="text-[11px] uppercase tracking-wider text-[#8e8e93] mb-2">Supplemental</h3>
                     <div className="bg-[#2c2c2e] rounded-lg px-3 py-2.5">
@@ -460,7 +463,7 @@ export default function WorkoutPlanEditor({
                         className="w-full text-sm"
                       />
                     </div>
-                    {isHypertrophy ? (
+                    {isTopSetProgram ? (
                       <>
                         <div className="flex-1">
                           <label className="block text-sm text-[#8e8e93] mb-1">Min reps</label>
@@ -498,7 +501,7 @@ export default function WorkoutPlanEditor({
                       </div>
                     )}
                   </div>
-                  {isHypertrophy && (
+                  {isTopSetProgram && (
                     <div>
                       <label className="block text-sm text-[#8e8e93] mb-1">Progression</label>
                       <select

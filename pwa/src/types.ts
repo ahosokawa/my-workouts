@@ -157,7 +157,7 @@ export type DeloadType = (typeof DeloadType)[keyof typeof DeloadType]
 // Program Type (5/3/1 vs 4-Day Hypertrophy)
 // ============================================================
 
-export const ProgramType = { FiveThreeOne: '531', Hypertrophy: 'hypertrophy' } as const
+export const ProgramType = { FiveThreeOne: '531', Hypertrophy: 'hypertrophy', UpperLower: 'upper_lower' } as const
 export type ProgramType = (typeof ProgramType)[keyof typeof ProgramType]
 
 /** Per-exercise progression strategy. Spec §5. */

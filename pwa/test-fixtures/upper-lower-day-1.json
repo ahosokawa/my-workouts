@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "exportedAt": "2026-05-12T00:00:00.000Z",
+  "profile": {
+    "squatOneRepMax": 265,
+    "benchOneRepMax": 185,
+    "deadliftOneRepMax": 343,
+    "pressOneRepMax": 133,
+    "squatTM": 225,
+    "benchTM": 157.5,
+    "deadliftTM": 290,
+    "pressTM": 112.5,
+    "currentWeek": 1,
+    "currentDay": 1,
+    "cycleNumber": 1,
+    "isCycleComplete": false,
+    "currentVariant": "fsl",
+    "leaderCycleCount": 0,
+    "anchorCycleCount": 0,
+    "tmPercentage": 85,
+    "sex": "male",
+    "units": "lbs",
+    "isDeloading": false,
+    "deloadType": null,
+    "deloadDay": 1,
+    "bodyWeightLbs": 180,
+    "bodyWeightLastUpdated": "2026-05-12T00:00:00.000Z",
+    "createdAt": "2026-05-01T00:00:00.000Z",
+    "programType": "upper_lower",
+    "cycleWeeks": 7,
+    "dayOrder": [2, 1, 4, 3],
+    "completedDaysThisWeek": [],
+    "hypertrophyTopSets": { "1": 192.5, "2": 135, "3": 247.5, "4": 95 }
+  },
+  "sessions": [],
+  "setLogs": [],
+  "wilksEntries": [],
+  "customAccessories": {
+    "2": [
+      { "id": "ul-pullup", "name": "Pull-Ups", "weightType": "bodyweight",
+        "sets": 4, "reps": 7, "repRangeMin": 6, "repRangeMax": 8, "progressionType": "reps_then_load" },
+      { "id": "ul-incline-db", "name": "Incline DB Bench Press", "weightType": "standard",
+        "sets": 3, "reps": 9, "repRangeMin": 8, "repRangeMax": 10, "progressionType": "double_progression" }
+    ],
+    "1": [
+      { "id": "ul-rdl", "name": "Romanian Deadlift", "weightType": "barbell",
+        "sets": 3, "reps": 9, "repRangeMin": 8, "repRangeMax": 10, "progressionType": "double_progression" }
+    ],
+    "4": [
+      { "id": "ul-csr", "name": "Chest-Supported DB Row", "weightType": "standard",
+        "sets": 4, "reps": 9, "repRangeMin": 8, "repRangeMax": 10, "progressionType": "double_progression" }
+    ],
+    "3": [
+      { "id": "ul-front-sq", "name": "Front Squat", "weightType": "barbell",
+        "sets": 3, "reps": 11, "repRangeMin": 10, "repRangeMax": 12, "progressionType": "double_progression" }
+    ]
+  },
+  "savedExercises": []
+}

@@ -4,8 +4,8 @@ import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVa
 import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
-import { mainLiftForDay } from '../logic/hypertrophyCalculator'
-import { getAccessories, getHypertrophyAccessories } from '../logic/accessories'
+import { mainLiftForDay, usesTopSetEngine, programLabel, programDescription } from '../logic/hypertrophyCalculator'
+import { getProgramAccessories } from '../logic/accessories'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
@@ -32,7 +32,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
 
   const units = profile.units ?? 'lbs'
   const programType = profile.programType ?? ProgramType.FiveThreeOne
-  const isHypertrophy = programType === ProgramType.Hypertrophy
+  const isTopSetProgram = usesTopSetEngine(programType)
   const cycleResult = useMemo(
     () => evaluateCycle(sessions, setLogs, profile.cycleNumber),
     [sessions, setLogs, profile.cycleNumber],
@@ -46,7 +46,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
   // Hypertrophy: per-lift top-set delta over the just-completed cycle. Compares the first
   // top-set entry of the cycle with the latest, for each main lift that has a top set.
   const topSetDelta = (() => {
-    if (!isHypertrophy) return null
+    if (!isTopSetProgram) return null
     const m: Partial<Record<MainLift, { first: number; last: number }>> = {}
     for (const lift of MAIN_LIFTS) {
       if (!mainLiftForDay(programType, lift)) continue  // skip Friday (no main)
@@ -75,7 +75,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
   )
 
   const [selectedProgramType, setSelectedProgramType] = useState<ProgramTypeT>(programType)
-  const selectedIsHypertrophy = selectedProgramType === ProgramType.Hypertrophy
+  const selectedIsTopSetProgram = usesTopSetEngine(selectedProgramType)
 
   // Day order for the next cycle (5/3/1 only). Persisted on Start; takes effect
   // when the next cycle begins fresh at week 1 / day 1.
@@ -139,7 +139,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       })
     } else {
       // Different program — recompute TMs from 1RM × new program's TM percentage.
-      const pct = selectedProgramType === ProgramType.Hypertrophy ? 85 : (profile!.tmPercentage ?? 90)
+      const pct = usesTopSetEngine(selectedProgramType) ? 85 : (profile!.tmPercentage ?? 90)
       const tmFor = (rmLbs: number) => roundWeight(toDisplayWeight(rmLbs, units) * (pct / 100), units)
       setEditedTMs({
         [MainLift.Squat]: String(tmFor(profile!.squatOneRepMax)),
@@ -158,16 +158,13 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       if (source?.[lift]) {
         accessories[lift] = source[lift].map((ex) => ({ ...ex }))
       } else {
-        const defaults = selectedProgramType === ProgramType.Hypertrophy
-          ? getHypertrophyAccessories(lift)
-          : getAccessories(lift)
-        accessories[lift] = defaults.map((ex) => ({ ...ex }))
+        accessories[lift] = getProgramAccessories(selectedProgramType, lift).map((ex) => ({ ...ex }))
       }
     }
     setDayAccessories(accessories)
 
     // Supplemental overrides only apply to 5/3/1.
-    if (selectedProgramType === ProgramType.Hypertrophy) {
+    if (usesTopSetEngine(selectedProgramType)) {
       setDaySupplemental({})
     } else {
       const suppSource =
@@ -207,7 +204,9 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       benchTM: bp,
       deadliftTM: dl,
       pressTM: sp,
-      dayOrder,
+      // Top-set-engine programs use a fixed day order (set by switchProgram); only 5/3/1
+      // takes the editable day order from the DayOrderEditor.
+      ...(selectedIsTopSetProgram ? {} : { dayOrder }),
       ...(bw > 0 ? { bodyWeightLbs: toStorageLbs(bw, units), bodyWeightLastUpdated: new Date().toISOString() } : {}),
     })
     setCustomAccessories(dayAccessories)
@@ -238,7 +237,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold mb-1">Cycle {profile.cycleNumber} Complete</h1>
         <p className="text-sm text-[#8e8e93]">
-          {isHypertrophy
+          {isTopSetProgram
             ? 'Review top-set progress, adjust TMs, and decide on a deload before the next block.'
             : cycleResult.isSuccessful
               ? 'All AMRAP targets met! Training maxes will increase.'
@@ -250,11 +249,11 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">
-            {isHypertrophy ? 'Top-Set Progress' : 'Results'}
+            {isTopSetProgram ? 'Top-Set Progress' : 'Results'}
           </h2>
         </div>
         <div className="px-4 pb-3 divide-y divide-[#38383a]">
-          {isHypertrophy
+          {isTopSetProgram
             ? MAIN_LIFTS.map((lift) => {
                 const data = topSetDelta?.[lift]
                 if (!data) return null
@@ -339,8 +338,8 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Next Cycle Program</h2>
         </div>
         <div className="px-4 pb-3">
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => {
+          <div className="grid grid-cols-1 gap-2 mb-3">
+            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => {
               const isSelected = selectedProgramType === p
               return (
                 <button
@@ -352,19 +351,15 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
                       : 'border border-[#38383a] bg-[#1c1c1e]'
                   }`}
                 >
-                  <div className="font-semibold text-sm">
-                    {p === ProgramType.FiveThreeOne ? '5/3/1' : '4-Day Hypertrophy'}
-                  </div>
+                  <div className="font-semibold text-sm">{programLabel(p)}</div>
                   <div className="text-xs text-[#8e8e93] mt-1">
-                    {p === ProgramType.FiveThreeOne
-                      ? 'Top-set AMRAP percentages over 3-week cycles'
-                      : 'RPE-8 top sets + double progression, 7-week cycles'}
+                    {programDescription(p)}
                   </div>
                 </button>
               )
             })}
           </div>
-          {!selectedIsHypertrophy && (
+          {!selectedIsTopSetProgram && (
             <>
               <div className="text-xs text-[var(--color-accent)] mb-2">
                 {suggestedPhase === PhaseType.Anchor
@@ -464,7 +459,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       </div>
 
       {/* Workout Day Order for the next cycle (5/3/1 only) */}
-      {!selectedIsHypertrophy && (
+      {!selectedIsTopSetProgram && (
         <div className="mb-4">
           <DayOrderEditor dayOrder={dayOrder} onChange={setDayOrder} />
         </div>
@@ -480,7 +475,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgramType}
-          dayOrder={selectedIsHypertrophy ? undefined : dayOrder}
+          dayOrder={selectedIsTopSetProgram ? undefined : dayOrder}
         />
       </div>
 

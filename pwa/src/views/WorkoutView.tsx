@@ -4,7 +4,7 @@ import { liftDisplayName, liftShortName, AccessoryWeightType, ProgramType, Progr
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, hypertrophyDayLabel } from '../logic/hypertrophyCalculator'
+import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/hypertrophyCalculator'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
   recentMainLiftTopSets, lastAccessorySession,
@@ -55,7 +55,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const [topSetRir, setTopSetRir] = useState<number | null>(null)
 
   const programType = profile.programType ?? ProgramType.FiveThreeOne
-  const isHypertrophy = programType === ProgramType.Hypertrophy
+  const isTopSetProgram = usesTopSetEngine(programType)
   // While a workout is in progress its day + lift are pinned (captured in
   // startSession) so a mid-session profile change — settings, cloud sync — can't
   // silently re-point it to another lift. Before a workout starts, both follow
@@ -74,16 +74,16 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const tm = lift ? useStore.getState().getTrainingMax(lift) : 0
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
-  const suppOverride = (!isHypertrophy && lift) ? (customSupplemental?.[lift] ?? null) : null
+  const suppOverride = (!isTopSetProgram && lift) ? (customSupplemental?.[lift] ?? null) : null
 
   // Build the main-lift prescription. For hypertrophy with a top-set main, use the stored
   // top-set weight; the algorithm computes warmups off of it. For day 4 (no main), empty.
   const sets = (() => {
     if (!lift) return []
-    if (isHypertrophy) {
+    if (isTopSetProgram) {
       const topSetLbs = profile.hypertrophyTopSets?.[lift]
       if (!topSetLbs || topSetLbs <= 0) return []
-      const range = topSetRepRange(lift)
+      const range = topSetRepRange(lift, programType)
       return hypertrophyMainSets(topSetLbs, range.min, range.max)
     }
     return prescribedSets(tm, profile.currentWeek, currentVariant, suppOverride?.trainingMaxLbs)
@@ -161,7 +161,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const defaultWeight = useCallback(
     (ex: AccessoryExercise): string => {
       // Hypertrophy: prefer the progression algorithm's suggestion when it exists.
-      if (isHypertrophy) {
+      if (isTopSetProgram) {
         const s = accessorySuggestion(ex)
         if (s && s.weight > 0) return String(s.weight)
       }
@@ -179,12 +179,12 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       return ''
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setLogs, profile, units, isHypertrophy],
+    [setLogs, profile, units, isTopSetProgram],
   )
 
   const defaultReps = useCallback(
     (ex: AccessoryExercise): string => {
-      if (isHypertrophy) {
+      if (isTopSetProgram) {
         const s = accessorySuggestion(ex)
         if (s) return String(s.reps)
         if (ex.repRangeMin !== undefined) return String(ex.repRangeMin)
@@ -195,7 +195,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       return last ? String(last.targetReps) : String(ex.reps)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setLogs, isHypertrophy],
+    [setLogs, isTopSetProgram],
   )
 
   // ---- Hypertrophy progression suggestions ----
@@ -203,10 +203,10 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   /** For the current main lift in hypertrophy mode, what does the algorithm
    *  suggest for next session? Used to update profile.hypertrophyTopSets on save. */
   function computeNextHypertrophyTopSet(actualReps: number, rir: number | null): { weightLbs: number; message: string } | null {
-    if (!isHypertrophy || !lift || !profile) return null
+    if (!isTopSetProgram || !lift || !profile) return null
     const currentTopLbs = profile.hypertrophyTopSets?.[lift] ?? 0
     if (currentTopLbs <= 0) return null
-    const range = topSetRepRange(lift)
+    const range = topSetRepRange(lift, programType)
     const recent = recentMainLiftTopSets(setLogs, lift, 3).map((l) => ({
       weightLbs: l.weight,
       actualReps: l.actualReps ?? 0,
@@ -225,7 +225,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   /** Suggested next set for an accessory based on its progressionType and history. */
   function accessorySuggestion(ex: AccessoryExercise): { weight: number; reps: number; message: string } | null {
-    if (!isHypertrophy) return null
+    if (!isTopSetProgram) return null
     const pType = ex.progressionType ?? ProgressionType.Fixed
     if (pType === ProgressionType.Fixed || pType === ProgressionType.RepsOnly || pType === ProgressionType.RomStages) return null
     const range = ex.repRangeMin !== undefined && ex.repRangeMax !== undefined
@@ -281,8 +281,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     setCollapsedSections(new Set())
     setTopSetRir(null)
     // Default top-set reps: bottom of range for hypertrophy, AMRAP minimum for 5/3/1.
-    const startingReps = isHypertrophy && lift
-      ? topSetRepRange(lift).min
+    const startingReps = isTopSetProgram && lift
+      ? topSetRepRange(lift, programType).min
       : amrapMinimum(profile!.currentWeek)
     updateAW({
       isActive: true,
@@ -399,7 +399,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         isCompleted: completed,
         completedAt: completed ? new Date().toISOString() : null,
         // Persist RIR on the hypertrophy top-set only (the lone AMRAP entry).
-        ...(s.isAMRAP && isHypertrophy && completed ? { rir: topSetRir } : {}),
+        ...(s.isAMRAP && isTopSetProgram && completed ? { rir: topSetRir } : {}),
       })
       if (s.isAMRAP && completed) {
         curAmrapWeight = weightLbs
@@ -439,7 +439,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     )
 
     // Hypertrophy: bump the stored top-set weight for next session via the autoprogression algo.
-    if (isHypertrophy && lift && curAmrapReps > 0) {
+    if (isTopSetProgram && lift && curAmrapReps > 0) {
       const next = computeNextHypertrophyTopSet(curAmrapReps, topSetRir)
       if (next) {
         updateProfile({
@@ -509,7 +509,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const showDayPicker = !aw.isActive && completedDays.length < 3
 
   // 5/3/1 always needs a lift; hypertrophy day 4 (Pull Focus) has no top-set main.
-  if (!lift && !isHypertrophy) return null
+  if (!lift && !isTopSetProgram) return null
   return (
     <div className="p-4 pb-2 space-y-4">
       {/* Header */}
@@ -518,13 +518,13 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           <div>
             <h1 className="text-xl font-bold">
               Week {profile.currentWeek}:{' '}
-              {isHypertrophy
-                ? hypertrophyDayLabel(activeDay)
+              {isTopSetProgram
+                ? dayLabel(programType, activeDay)
                 : (lift ? liftDisplayName(lift) : '')}
             </h1>
             <p className="text-sm text-[#8e8e93]">
               Cycle {profile.cycleNumber} · Day {activeDay} of 4
-              {isHypertrophy ? ' · Hypertrophy' : ` · ${variantConfig.shortLabel}`}
+              {isTopSetProgram ? ` · ${programLabel(programType)}` : ` · ${variantConfig.shortLabel}`}
             </p>
           </div>
           {aw.isActive && (
@@ -580,7 +580,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       {/* Warmups + Top Set (hypertrophy) or Warmups + 5/3/1 working sets */}
       {sets.length > 0 && (
         <CollapsibleSection
-          title={isHypertrophy ? `Warmups + Top Set – ${lift ? liftDisplayName(lift) : ''}` : 'Warmups + 5/3/1'}
+          title={isTopSetProgram ? `Warmups + Top Set – ${lift ? liftDisplayName(lift) : ''}` : 'Warmups + 5/3/1'}
           isCollapsed={collapsedSections.has('warmup-working')}
           onToggle={() => toggleSection('warmup-working')}
           badge={completionBadge(warmupWorkingComplete, warmupWorkingIndices.length)}
@@ -601,10 +601,10 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                 onRepsChange={(v) => updateMainReps(i, v)}
                 onToggle={() => toggleSet('main', i)}
                 units={units}
-                showPercentage={!isHypertrophy}
+                showPercentage={!isTopSetProgram}
               />
               {/* RIR picker — only on the hypertrophy top set, while active and not yet completed */}
-              {isHypertrophy && s.isAMRAP && aw.isActive && !completedMain.has(i) && (
+              {isTopSetProgram && s.isAMRAP && aw.isActive && !completedMain.has(i) && (
                 <div className="ml-10 mb-3 mt-1" onClick={(e) => e.stopPropagation()}>
                   <div className="text-xs text-[#8e8e93] mb-1.5">RIR (optional — reps left in the tank)</div>
                   <div className="flex gap-1.5">
@@ -631,7 +631,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       )}
 
       {/* 5/3/1 Supplemental Sets — not present in hypertrophy */}
-      {!isHypertrophy && supplementalIndices.length > 0 && (
+      {!isTopSetProgram && supplementalIndices.length > 0 && (
         <CollapsibleSection
           title={`${variantConfig.shortLabel} ${variantConfig.supplementalSets}×${variantConfig.supplementalReps} – ${suppDisplayName}`}
           isCollapsed={collapsedSections.has('supplemental')}

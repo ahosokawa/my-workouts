@@ -4,7 +4,8 @@ import { MAIN_LIFTS, ProgramVariant, PhaseType, ProgramType, toStorageLbs } from
 import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT, MainLift } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { getHypertrophyAccessories } from '../logic/accessories'
+import { getProgramAccessories } from '../logic/accessories'
+import { usesTopSetEngine, programLabel, programDescription } from '../logic/hypertrophyCalculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
 
@@ -45,10 +46,10 @@ export default function OnboardingView() {
   // program's default accessories. For hypertrophy we also lock TM% to 85.
   function pickProgram(program: ProgramTypeT) {
     setSelectedProgram(program)
-    if (program === ProgramType.Hypertrophy) {
+    if (usesTopSetEngine(program)) {
       const m: Record<number, AccessoryExercise[]> = {}
       for (const lift of MAIN_LIFTS) {
-        m[lift] = getHypertrophyAccessories(lift).map((ex) => ({ ...ex }))
+        m[lift] = getProgramAccessories(program, lift).map((ex) => ({ ...ex }))
       }
       setDayAccessories(m)
       setTmPercentage(85)
@@ -82,7 +83,7 @@ export default function OnboardingView() {
     })
     setCustomAccessories(dayAccessories)
     setCustomSupplemental(
-      selectedProgram === ProgramType.Hypertrophy
+      usesTopSetEngine(selectedProgram)
         ? null
         : (Object.keys(daySupplemental).length > 0 ? daySupplemental : null),
     )
@@ -106,7 +107,7 @@ export default function OnboardingView() {
           </p>
         </div>
 
-        {selectedProgram !== ProgramType.Hypertrophy && (
+        {!usesTopSetEngine(selectedProgram) && (
           <div className="mb-4">
             <DayOrderEditor dayOrder={dayOrder} onChange={setDayOrder} />
           </div>
@@ -120,7 +121,7 @@ export default function OnboardingView() {
           variantConfig={getVariantConfig(selectedVariant)}
           units={units}
           programType={selectedProgram}
-          dayOrder={selectedProgram === ProgramType.Hypertrophy ? undefined : dayOrder}
+          dayOrder={usesTopSetEngine(selectedProgram) ? undefined : dayOrder}
         />
 
         <div className="flex-1 min-h-6" />
@@ -145,7 +146,7 @@ export default function OnboardingView() {
 
   // ---- Step 2: Program Selection ----
   if (step === 2) {
-    const isHypertrophy = selectedProgram === ProgramType.Hypertrophy
+    const isTopSetProgram = usesTopSetEngine(selectedProgram)
     return (
       <div className="min-h-full flex flex-col p-6">
         <div className="text-center mb-6">
@@ -155,8 +156,8 @@ export default function OnboardingView() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => {
+        <div className="grid grid-cols-1 gap-2 mb-4">
+          {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => {
             const isSelected = selectedProgram === p
             return (
               <button
@@ -168,20 +169,14 @@ export default function OnboardingView() {
                     : 'border border-[#38383a] bg-[#1c1c1e]'
                 }`}
               >
-                <div className="font-semibold text-sm">
-                  {p === ProgramType.FiveThreeOne ? '5/3/1' : '4-Day Hypertrophy'}
-                </div>
-                <div className="text-xs text-[#8e8e93] mt-1">
-                  {p === ProgramType.FiveThreeOne
-                    ? 'Top-set AMRAP percentages over 3-week cycles'
-                    : 'Top-set RPE 8 + double-progression accessories, 7-week cycles'}
-                </div>
+                <div className="font-semibold text-sm">{programLabel(p)}</div>
+                <div className="text-xs text-[#8e8e93] mt-1">{programDescription(p)}</div>
               </button>
             )
           })}
         </div>
 
-        {!isHypertrophy && (
+        {!isTopSetProgram && (
           <>
             <h2 className="text-xs uppercase tracking-wider text-[#8e8e93] mt-2 mb-2">
               Supplemental Variant
@@ -232,12 +227,14 @@ export default function OnboardingView() {
           </>
         )}
 
-        {isHypertrophy && (
+        {isTopSetProgram && (
           <div className="bg-[#1c1c1e] rounded-xl p-4 text-xs text-[#8e8e93]">
-            <div className="text-white text-sm font-semibold mb-1">Hypertrophy notes</div>
+            <div className="text-white text-sm font-semibold mb-1">{programLabel(selectedProgram)} notes</div>
             Training maxes are computed at 85% of 1RM. Top set is autoregulated by RPE (cap at RPE 8 / 2 RIR).
             Accessories run on double progression — when all sets hit the top of the range, the suggested weight bumps up.
-            Cardio days from the spec are not tracked here.
+            {selectedProgram === ProgramType.UpperLower
+              ? ' Trains Upper A → Lower A → Upper B → Lower B with a top set on all four days.'
+              : ' Cardio days from the spec are not tracked here.'}
           </div>
         )}
 
