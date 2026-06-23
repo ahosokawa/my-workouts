@@ -4,9 +4,9 @@ import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, Accesso
 import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight, isValidDayOrder } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
-import { getAccessories, getHypertrophyAccessories } from './logic/accessories'
+import { getProgramAccessories } from './logic/accessories'
 import { computeWeekAdvance, remainingDays } from './logic/weekOrder'
-import { mainLiftForDay } from './logic/hypertrophyCalculator'
+import { mainLiftForDay, usesTopSetEngine, UPPER_LOWER_DAY_ORDER } from './logic/hypertrophyCalculator'
 
 // ============================================================
 // Helpers
@@ -145,8 +145,9 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
   // One-time migration: populate default accessories for existing users who never customized
   if (state.profile && !(state as Record<string, unknown>)._migratedAccessories && (state.customAccessories === undefined || state.customAccessories === null)) {
     const m: Record<number, AccessoryExercise[]> = {}
+    const pt = state.profile.programType ?? PT.FiveThreeOne
     for (const lift of MAIN_LIFTS) {
-      m[lift] = getAccessories(lift).map((ex) => ({ ...ex }))
+      m[lift] = getProgramAccessories(pt, lift).map((ex) => ({ ...ex }))
     }
     state.customAccessories = m
   }
@@ -248,8 +249,8 @@ export const useStore = create<AppState>()(
 
       createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units, programType) => {
         const program = programType ?? PT.FiveThreeOne
-        // Hypertrophy locks tmPercentage to 85; 5/3/1 defaults to 90 when unspecified.
-        const effectiveTmPct: 85 | 90 = program === PT.Hypertrophy ? 85 : (tmPercentage ?? 90)
+        // Top-set-engine programs lock tmPercentage to 85; 5/3/1 defaults to 90 when unspecified.
+        const effectiveTmPct: 85 | 90 = usesTopSetEngine(program) ? 85 : (tmPercentage ?? 90)
         const pct = effectiveTmPct / 100
         const u = units ?? 'lbs'
         // User enters values in their units — convert to lbs for storage
@@ -262,12 +263,15 @@ export const useStore = create<AppState>()(
         const bpTM = toStorageLbs(roundWeight(benchRM * pct, u), u)
         const dlTM = toStorageLbs(roundWeight(deadliftRM * pct, u), u)
         const prTM = toStorageLbs(roundWeight(pressRM * pct, u), u)
-        // Hypertrophy seeds initial top sets at ~85% of TM (≈72% of 1RM)
-        const hypertrophyTopSets = program === PT.Hypertrophy
+        // Top-set-engine programs seed initial top sets at ~85% of TM (≈72% of 1RM). Upper/Lower
+        // has a top-set main on all 4 days, so it also seeds OHP (slot 4).
+        const seedTop = (tm: number) => toStorageLbs(roundWeight(toDisplayWeight(tm, u) * 0.85, u), u)
+        const hypertrophyTopSets = usesTopSetEngine(program)
           ? {
-              1: toStorageLbs(roundWeight(toDisplayWeight(sqTM, u) * 0.85, u), u),
-              2: toStorageLbs(roundWeight(toDisplayWeight(bpTM, u) * 0.85, u), u),
-              3: toStorageLbs(roundWeight(toDisplayWeight(dlTM, u) * 0.85, u), u),
+              1: seedTop(sqTM),
+              2: seedTop(bpTM),
+              3: seedTop(dlTM),
+              ...(program === PT.UpperLower ? { 4: seedTop(prTM) } : {}),
             }
           : undefined
         const profile: UserProfile = {
@@ -296,8 +300,8 @@ export const useStore = create<AppState>()(
           bodyWeightLastUpdated: null,
           createdAt: new Date().toISOString(),
           programType: program,
-          cycleWeeks: program === PT.Hypertrophy ? 7 : 3,
-          dayOrder: [...MAIN_LIFTS],
+          cycleWeeks: usesTopSetEngine(program) ? 7 : 3,
+          dayOrder: program === PT.UpperLower ? [...UPPER_LOWER_DAY_ORDER] : [...MAIN_LIFTS],
           completedDaysThisWeek: [],
           hypertrophyTopSets,
         }
@@ -460,21 +464,18 @@ export const useStore = create<AppState>()(
           if (archivedAccessories?.[lift]) {
             nextAccessories[lift] = archivedAccessories[lift].map((ex) => ({ ...ex }))
           } else {
-            const defaults = programType === PT.Hypertrophy
-              ? getHypertrophyAccessories(lift)
-              : getAccessories(lift)
-            nextAccessories[lift] = defaults.map((ex) => ({ ...ex }))
+            nextAccessories[lift] = getProgramAccessories(programType, lift).map((ex) => ({ ...ex }))
           }
         }
-        // Supplemental overrides only apply to 5/3/1; hypertrophy has no supplemental.
+        // Supplemental overrides only apply to 5/3/1; top-set-engine programs have no supplemental.
         const nextSupplemental =
-          programType === PT.Hypertrophy ? null : (nextSupplementalArchive[programType] ?? null)
+          usesTopSetEngine(programType) ? null : (nextSupplementalArchive[programType] ?? null)
         // Once the new program's archive has been consumed, clear it so a later switch back
         // doesn't restore stale data — fresh edits will repopulate it.
         delete nextAccessoryArchive[programType]
         delete nextSupplementalArchive[programType]
-        // tmPercentage convention: hypertrophy = 85, 5/3/1 preserves current (default 90).
-        const newTmPct: 85 | 90 = programType === PT.Hypertrophy ? 85 : profile.tmPercentage
+        // tmPercentage convention: top-set-engine programs = 85, 5/3/1 preserves current (default 90).
+        const newTmPct: 85 | 90 = usesTopSetEngine(programType) ? 85 : profile.tmPercentage
         const u = profile.units ?? 'lbs'
         const computeTM = (rmLbs: number) =>
           toStorageLbs(roundWeight(toDisplayWeight(rmLbs, u) * (newTmPct / 100), u), u)
@@ -482,20 +483,24 @@ export const useStore = create<AppState>()(
         const bpTM = computeTM(profile.benchOneRepMax)
         const dlTM = computeTM(profile.deadliftOneRepMax)
         const prTM = computeTM(profile.pressOneRepMax)
-        // Seed hypertrophy top sets at ~85% of TM (≈ spec week-1 starting top sets).
-        const hypertrophyTopSets =
-          programType === PT.Hypertrophy
-            ? {
-                1: toStorageLbs(roundWeight(toDisplayWeight(sqTM, u) * 0.85, u), u),
-                2: toStorageLbs(roundWeight(toDisplayWeight(bpTM, u) * 0.85, u), u),
-                3: toStorageLbs(roundWeight(toDisplayWeight(dlTM, u) * 0.85, u), u),
-              }
-            : undefined
+        // Seed engine top sets at ~85% of TM (≈ spec week-1 starting top sets). Upper/Lower has
+        // a top-set main on all 4 days, so it also seeds OHP (slot 4).
+        const seedTop = (tm: number) => toStorageLbs(roundWeight(toDisplayWeight(tm, u) * 0.85, u), u)
+        const hypertrophyTopSets = usesTopSetEngine(programType)
+          ? {
+              1: seedTop(sqTM),
+              2: seedTop(bpTM),
+              3: seedTop(dlTM),
+              ...(programType === PT.UpperLower ? { 4: seedTop(prTM) } : {}),
+            }
+          : undefined
+        // Upper/Lower trains in a fixed Bench→Squat→OHP→Deadlift order; other programs keep theirs.
+        const nextDayOrder = programType === PT.UpperLower ? [...UPPER_LOWER_DAY_ORDER] : profile.dayOrder
         set({
           profile: {
             ...profile,
             programType,
-            cycleWeeks: programType === PT.Hypertrophy ? 7 : 3,
+            cycleWeeks: usesTopSetEngine(programType) ? 7 : 3,
             tmPercentage: newTmPct,
             squatTM: sqTM,
             benchTM: bpTM,
@@ -504,6 +509,7 @@ export const useStore = create<AppState>()(
             currentWeek: 1,
             currentDay: 1,
             completedDaysThisWeek: [],
+            dayOrder: nextDayOrder,
             isCycleComplete: false,
             isDeloading: false,
             deloadType: null,

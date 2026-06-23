@@ -5,6 +5,9 @@ import {
   mainLiftForDay,
   topSetRepRange,
   hypertrophyDayLabel,
+  usesTopSetEngine,
+  dayLabel,
+  programLabel,
 } from './hypertrophyCalculator'
 import { MainLift, ProgramType } from '../types'
 
@@ -75,6 +78,44 @@ describe('topSetRepRange', () => {
     expect(topSetRepRange(MainLift.Squat)).toEqual({ min: 5, max: 6 })
     expect(topSetRepRange(MainLift.BenchPress)).toEqual({ min: 5, max: 6 })
     expect(topSetRepRange(MainLift.Deadlift)).toEqual({ min: 3, max: 5 })
+  })
+
+  it('widens OHP to 5-8 for the Upper/Lower program', () => {
+    expect(topSetRepRange(MainLift.ShoulderPress, ProgramType.UpperLower)).toEqual({ min: 5, max: 8 })
+    // Other lifts unchanged across programs
+    expect(topSetRepRange(MainLift.Deadlift, ProgramType.UpperLower)).toEqual({ min: 3, max: 5 })
+  })
+})
+
+describe('Upper/Lower program', () => {
+  it('is recognized as a top-set-engine program', () => {
+    expect(usesTopSetEngine(ProgramType.UpperLower)).toBe(true)
+    expect(usesTopSetEngine(ProgramType.Hypertrophy)).toBe(true)
+    expect(usesTopSetEngine(ProgramType.FiveThreeOne)).toBe(false)
+  })
+
+  it('maps days 1-4 to Bench, Squat, OHP, Deadlift (Upper A → Lower A → Upper B → Lower B)', () => {
+    expect(mainLiftForDay(ProgramType.UpperLower, 1)).toBe(MainLift.BenchPress)
+    expect(mainLiftForDay(ProgramType.UpperLower, 2)).toBe(MainLift.Squat)
+    expect(mainLiftForDay(ProgramType.UpperLower, 3)).toBe(MainLift.ShoulderPress)
+    expect(mainLiftForDay(ProgramType.UpperLower, 4)).toBe(MainLift.Deadlift)
+  })
+
+  it('has a top-set main lift on all four days', () => {
+    for (const day of [1, 2, 3, 4]) {
+      expect(dayHasTopSetMain(ProgramType.UpperLower, day)).toBe(true)
+    }
+  })
+
+  it('ignores a passed dayOrder (fixed program order)', () => {
+    // Even if a stale dayOrder is supplied, the program order wins.
+    expect(mainLiftForDay(ProgramType.UpperLower, 1, [MainLift.Squat, MainLift.BenchPress, MainLift.Deadlift, MainLift.ShoulderPress])).toBe(MainLift.BenchPress)
+  })
+
+  it('has its own day labels and program label', () => {
+    expect(dayLabel(ProgramType.UpperLower, 1)).toBe('Upper A — Chest/Horizontal')
+    expect(dayLabel(ProgramType.UpperLower, 4)).toBe('Lower B — Hinge')
+    expect(programLabel(ProgramType.UpperLower)).toBe('4-Day Upper/Lower')
   })
 })
 

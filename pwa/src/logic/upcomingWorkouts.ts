@@ -13,12 +13,13 @@ import {
 } from '../types'
 import { prescribedSets } from './calculator'
 import {
-  hypertrophyDayLabel,
+  dayLabel,
   hypertrophyMainSets,
   mainLiftForDay,
   topSetRepRange,
+  usesTopSetEngine,
 } from './hypertrophyCalculator'
-import { getAccessories, getHypertrophyAccessories } from './accessories'
+import { getAccessories, getProgramAccessories } from './accessories'
 
 export interface UpcomingWorkout {
   week: number
@@ -49,18 +50,18 @@ function buildOne(
   customSupplemental: Record<number, SupplementalOverride> | null,
 ): UpcomingWorkout {
   const programType = profile.programType ?? ProgramType.FiveThreeOne
-  const isHypertrophy = programType === ProgramType.Hypertrophy
+  const isTopSetEngine = usesTopSetEngine(programType)
   const lift = mainLiftForDay(programType, day, profile.dayOrder)
   const accessoriesSlot = lift ?? ML.ShoulderPress
 
-  if (isHypertrophy) {
+  if (isTopSetEngine) {
     const accessories =
-      customAccessories?.[accessoriesSlot] ?? getHypertrophyAccessories(accessoriesSlot)
+      customAccessories?.[accessoriesSlot] ?? getProgramAccessories(programType, accessoriesSlot)
     let mainSets: PrescribedSet[] = []
     if (lift) {
       const topSetLbs = profile.hypertrophyTopSets?.[lift]
       if (topSetLbs && topSetLbs > 0) {
-        const range = topSetRepRange(lift)
+        const range = topSetRepRange(lift, programType)
         mainSets = hypertrophyMainSets(topSetLbs, range.min, range.max)
       }
     }
@@ -68,7 +69,7 @@ function buildOne(
       week,
       day,
       lift,
-      title: hypertrophyDayLabel(day),
+      title: dayLabel(programType, day),
       mainSets,
       supplementalSets: [],
       accessories,

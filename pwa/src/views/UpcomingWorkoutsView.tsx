@@ -5,6 +5,7 @@ import { AccessoryWeightType, ProgramType, displayRound } from '../types'
 import type { AccessoryExercise, PrescribedSet, SetLog, Units } from '../types'
 import { getUpcomingWorkouts, type UpcomingWorkout } from '../logic/upcomingWorkouts'
 import { getVariantConfig } from '../logic/variants'
+import { usesTopSetEngine, programLabel } from '../logic/hypertrophyCalculator'
 import { lastAccessorySession } from '../logic/progression'
 import CollapsibleSection from '../components/CollapsibleSection'
 
@@ -32,7 +33,8 @@ export default function UpcomingWorkoutsView() {
   if (!profile) return null
 
   const units = profile.units ?? 'lbs'
-  const isHypertrophy = (profile.programType ?? ProgramType.FiveThreeOne) === ProgramType.Hypertrophy
+  const programType = profile.programType ?? ProgramType.FiveThreeOne
+  const isTopSetProgram = usesTopSetEngine(programType)
 
   const byWeek = new Map<number, UpcomingWorkout[]>()
   for (const w of workouts) {
@@ -62,7 +64,7 @@ export default function UpcomingWorkoutsView() {
         <p className="text-sm text-[#8e8e93]">
           {workouts.length === 0
             ? 'No upcoming workouts in this cycle.'
-            : `${workouts.length} workout${workouts.length === 1 ? '' : 's'} remaining · ${isHypertrophy ? 'Hypertrophy' : getVariantConfig(profile.currentVariant ?? 'fsl').shortLabel}`}
+            : `${workouts.length} workout${workouts.length === 1 ? '' : 's'} remaining · ${isTopSetProgram ? programLabel(programType) : getVariantConfig(profile.currentVariant ?? 'fsl').shortLabel}`}
         </p>
       </div>
 
@@ -80,14 +82,14 @@ export default function UpcomingWorkoutsView() {
                 onToggle={() => toggle(key)}
                 trailing={
                   <span className="text-xs text-[#8e8e93]">
-                    {w.variant ? getVariantConfig(w.variant).shortLabel : 'Hypertrophy'}
+                    {w.variant ? getVariantConfig(w.variant).shortLabel : programLabel(programType)}
                   </span>
                 }
               >
                 <UpcomingWorkoutDetail
                   workout={w}
                   units={units}
-                  isHypertrophy={isHypertrophy}
+                  isTopSetProgram={isTopSetProgram}
                   setLogs={setLogs}
                   bodyWeightLbs={profile.bodyWeightLbs}
                 />
@@ -103,19 +105,19 @@ export default function UpcomingWorkoutsView() {
 function UpcomingWorkoutDetail({
   workout,
   units,
-  isHypertrophy,
+  isTopSetProgram,
   setLogs,
   bodyWeightLbs,
 }: {
   workout: UpcomingWorkout
   units: Units
-  isHypertrophy: boolean
+  isTopSetProgram: boolean
   setLogs: SetLog[]
   bodyWeightLbs: number | null
 }) {
   const variantConfig = workout.variant ? getVariantConfig(workout.variant) : null
 
-  const mainTitle = isHypertrophy
+  const mainTitle = isTopSetProgram
     ? `Warmups + Top Set${workout.title ? ` – ${workout.title}` : ''}`
     : 'Warmups + 5/3/1'
 
@@ -126,13 +128,13 @@ function UpcomingWorkoutDetail({
           <div className="text-xs uppercase tracking-wider text-[#8e8e93] mb-1">{mainTitle}</div>
           <div className="divide-y divide-[#38383a]">
             {workout.mainSets.map((s) => (
-              <PrescribedSetRow key={s.id} set={s} units={units} showPercentage={!isHypertrophy} />
+              <PrescribedSetRow key={s.id} set={s} units={units} showPercentage={!isTopSetProgram} />
             ))}
           </div>
         </div>
       )}
 
-      {isHypertrophy && workout.lift !== null && workout.mainSets.length === 0 && (
+      {isTopSetProgram && workout.lift !== null && workout.mainSets.length === 0 && (
         <div className="py-3 text-xs text-[#8e8e93]">
           Top set not seeded yet — log a session for this lift to populate the prescription.
         </div>
@@ -145,7 +147,7 @@ function UpcomingWorkoutDetail({
           </div>
           <div className="divide-y divide-[#38383a]">
             {workout.supplementalSets.map((s) => (
-              <PrescribedSetRow key={s.id} set={s} units={units} showPercentage={!isHypertrophy} />
+              <PrescribedSetRow key={s.id} set={s} units={units} showPercentage={!isTopSetProgram} />
             ))}
           </div>
         </div>

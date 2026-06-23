@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
+import { usesTopSetEngine, dayLabel, programLabel } from '../logic/hypertrophyCalculator'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
@@ -51,7 +52,7 @@ export default function SettingsView() {
   if (!profile) return null
 
   const units = profile.units ?? 'lbs'
-  const isHypertrophy = (profile.programType ?? ProgramType.FiveThreeOne) === ProgramType.Hypertrophy
+  const isTopSetProgram = usesTopSetEngine(profile.programType ?? ProgramType.FiveThreeOne)
   const dayOrder = profile.dayOrder ?? DEFAULT_DAY_ORDER
   // Day order may only be changed at a cycle boundary (week 1 / day 1, no active
   // workout). Reordering mid-cycle would skew which lifts the cycle evaluates.
@@ -125,15 +126,8 @@ export default function SettingsView() {
   }
 
   const liftDay = (day: number) => {
-    if (profile?.programType === ProgramType.Hypertrophy) {
-      const names: Record<number, string> = {
-        1: 'Lower — Squat Focus',
-        2: 'Upper — Push Focus',
-        3: 'Lower — Hinge Focus',
-        4: 'Upper — Pull Focus',
-      }
-      return names[day] ?? 'Unknown'
-    }
+    const pt = profile?.programType ?? ProgramType.FiveThreeOne
+    if (usesTopSetEngine(pt)) return dayLabel(pt, day)
     const lift = liftFromDay(day, dayOrder)
     return lift ? liftDisplayName(lift) : 'Unknown'
   }
@@ -237,8 +231,8 @@ export default function SettingsView() {
       <Section title="Program">
         <div className="flex items-center justify-between py-2">
           <span className="text-sm">Training Program</span>
-          <div className="flex gap-1">
-            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy] as ProgramTypeT[]).map((p) => (
+          <div className="flex flex-wrap gap-1 justify-end">
+            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => (
               <button
                 key={p}
                 onClick={() => {
@@ -251,7 +245,7 @@ export default function SettingsView() {
                     : 'bg-[#38383a] text-[#8e8e93]'
                 }`}
               >
-                {p === ProgramType.FiveThreeOne ? '5/3/1' : 'Hypertrophy'}
+                {p === ProgramType.UpperLower ? 'Upper/Lower' : p === ProgramType.Hypertrophy ? 'Hypertrophy' : '5/3/1'}
               </button>
             ))}
           </div>
@@ -260,7 +254,7 @@ export default function SettingsView() {
 
       {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics).
           Editable only at a cycle boundary; otherwise set it on the cycle-completion screen. */}
-      {!isHypertrophy && (
+      {!isTopSetProgram && (
         <DayOrderEditor
           dayOrder={dayOrder}
           onChange={(next) => updateProfile({ dayOrder: next })}
@@ -658,7 +652,7 @@ export default function SettingsView() {
       )}
       {pendingProgram && (
         <Alert
-          title={`Switch to ${pendingProgram === ProgramType.Hypertrophy ? 'Hypertrophy' : '5/3/1'}?`}
+          title={`Switch to ${programLabel(pendingProgram)}?`}
           message="This will reset your cycle position and replace your day-by-day plan with the new program's defaults. Workout history is preserved."
           onConfirm={handleProgramSwitch}
           onCancel={() => setPendingProgram(null)}

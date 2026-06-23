@@ -18,7 +18,7 @@ test.describe('Hypertrophy — onboarding', () => {
 
     // Step 2: program picker
     await expect(page.getByText('Choose Your Program')).toBeVisible()
-    await page.getByRole('button', { name: /4-Day Hypertrophy/ }).click()
+    await page.getByRole('button', { name: /^Hypertrophy/ }).click()
 
     // The 5/3/1 variant section should now be hidden
     await expect(page.getByRole('button', { name: /^FSL/ })).toBeHidden()
