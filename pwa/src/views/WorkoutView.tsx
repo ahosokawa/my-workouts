@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, liftShortName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
@@ -50,6 +50,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const elapsed = useElapsedTimer(aw.isActive, aw.startTime)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
+  const finishingRef = useRef(false)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
   const [topSetRir, setTopSetRir] = useState<number | null>(null)
@@ -64,6 +65,9 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const lift: MainLift | null = aw.isActive
     ? ((aw.liftRawValue ?? 0) > 0 ? (aw.liftRawValue as MainLift) : null)
     : mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
+  // Week is pinned too, so a mid-session week advance (cloud sync) can't
+  // re-prescribe the sets. Null snapshot = legacy in-flight workout → live.
+  const activeWeek = aw.isActive ? (aw.week ?? profile.currentWeek) : profile.currentWeek
 
   // Hypertrophy day 4 (Pull Focus) has no top-set main lift — we render only accessories.
   // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.
@@ -71,7 +75,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const accessoriesSlot = lift ?? 4
 
   const units = profile.units ?? 'lbs'
-  const tm = lift ? useStore.getState().getTrainingMax(lift) : 0
+  const liveTm = lift ? useStore.getState().getTrainingMax(lift) : 0
+  const tm = aw.isActive ? (aw.tmLbs ?? liveTm) : liveTm
   const currentVariant = profile.currentVariant ?? 'fsl'
   const variantConfig = getVariantConfig(currentVariant)
   const suppOverride = (!isTopSetProgram && lift) ? (customSupplemental?.[lift] ?? null) : null
@@ -81,12 +86,14 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const sets = (() => {
     if (!lift) return []
     if (isTopSetProgram) {
-      const topSetLbs = profile.hypertrophyTopSets?.[lift]
+      const topSetLbs = (aw.isActive ? aw.topSetLbs : null) ?? profile.hypertrophyTopSets?.[lift]
       if (!topSetLbs || topSetLbs <= 0) return []
       const range = topSetRepRange(lift, programType)
       return hypertrophyMainSets(topSetLbs, range.min, range.max)
     }
-    return prescribedSets(tm, profile.currentWeek, currentVariant, suppOverride?.trainingMaxLbs)
+    // suppOverride TM stays live: editing customSupplemental requires leaving
+    // the workout tab mid-session, which is out of the snapshot's scope.
+    return prescribedSets(tm, activeWeek, currentVariant, suppOverride?.trainingMaxLbs)
   })()
 
   const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
@@ -104,7 +111,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   // Reset collapsed state when workout identity changes (e.g. after finishing a workout)
   useEffect(() => {
     setCollapsedSections(new Set())
-  }, [activeDay, profile.currentWeek, profile.cycleNumber])
+  }, [activeDay, activeWeek, profile.cycleNumber])
 
   // Auto-collapse completed sections
   useEffect(() => {
@@ -289,6 +296,9 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       startTime: Date.now(),
       day: profile.currentDay,
       liftRawValue: lift ?? 0,
+      week: profile.currentWeek,
+      tmLbs: lift ? useStore.getState().getTrainingMax(lift) : null,
+      topSetLbs: isTopSetProgram && lift ? (profile.hypertrophyTopSets?.[lift] ?? null) : null,
       amrapReps: startingReps,
       completedMain: [],
       completedAccessory: [],
@@ -373,6 +383,19 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   function finishWorkout() {
     if (!profile) return
+    // Double-tap guard: saveWorkout/advanceDay are not idempotent, so a second
+    // tap must no-op. The fresh getState() read catches taps that land after
+    // clearAW() but before React re-renders; the ref catches same-tick reentry.
+    if (finishingRef.current || !useStore.getState().activeWorkout.isActive) return
+    finishingRef.current = true
+    try {
+      finishWorkoutInner()
+    } finally {
+      finishingRef.current = false
+    }
+  }
+
+  function finishWorkoutInner() {
     const duration = aw.startTime ? Math.floor((Date.now() - aw.startTime) / 1000) : 0
 
     const logEntries: Parameters<typeof saveWorkout>[1] = []
@@ -430,7 +453,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       {
         date: new Date().toISOString(),
         liftRawValue: lift ?? 0,  // 0 = no main lift (hypertrophy Pull day)
-        week: profile.currentWeek,
+        week: activeWeek,
         cycleNumber: profile.cycleNumber,
         durationSeconds: duration,
         variant: currentVariant,
@@ -517,7 +540,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold">
-              Week {profile.currentWeek}:{' '}
+              Week {activeWeek}:{' '}
               {isTopSetProgram
                 ? dayLabel(programType, activeDay)
                 : (lift ? liftDisplayName(lift) : '')}

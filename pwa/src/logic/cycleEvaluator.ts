@@ -19,6 +19,10 @@ export interface LiftResult {
   allMainSetsCompleted: boolean
   amrapMet: boolean
   amrapDetails: AmrapDetail[]
+  /** 5/3/1 weeks (1-3) with no completed AMRAP recorded for this lift.
+   *  Non-empty means the cycle lacks evidence for those weeks, so the lift
+   *  cannot count as successful (e.g. a cycle ended early). */
+  missingWeeks: number[]
 }
 
 export interface CycleResult {
@@ -29,6 +33,9 @@ export interface CycleResult {
 // ============================================================
 // Evaluation
 // ============================================================
+
+// The three 5/3/1 loading weeks. Deload sessions log week 0 and never count.
+const REQUIRED_WEEKS = [1, 2, 3] as const
 
 /**
  * Evaluate a cycle's sessions and set logs to determine success.
@@ -57,11 +64,13 @@ export function evaluateCycle(
         return mainSets.length >= 6 && mainSets.every((l) => l.isCompleted)
       })
 
-    // Check AMRAP sets
+    // Check AMRAP sets. Only COMPLETED AMRAP sets count as evidence — an
+    // unfinished AMRAP still carries the pre-filled default rep count, which
+    // would otherwise pass as "met" without the set ever being performed.
     const amrapDetails: AmrapDetail[] = []
     for (const session of liftSessions) {
       const amrapSets = setLogs.filter(
-        (l) => l.sessionId === session.id && l.isMainLift && l.isAMRAP,
+        (l) => l.sessionId === session.id && l.isMainLift && l.isAMRAP && l.isCompleted,
       )
       for (const amrap of amrapSets) {
         const minimum = amrapMinimum(session.week)
@@ -76,14 +85,20 @@ export function evaluateCycle(
       }
     }
 
+    // Success is AMRAP-only, but it requires AMRAP evidence from all three
+    // 5/3/1 weeks — a partial cycle (ended early / weeks skipped) must not
+    // suggest a TM increase off incomplete data.
+    const recordedWeeks = new Set(amrapDetails.map((d) => d.week))
+    const missingWeeks = REQUIRED_WEEKS.filter((w) => !recordedWeeks.has(w))
     const allAmrapMet =
-      amrapDetails.length > 0 && amrapDetails.every((d) => d.metMinimum)
+      missingWeeks.length === 0 && amrapDetails.every((d) => d.metMinimum)
 
     liftResults[lift] = {
       lift,
       allMainSetsCompleted,
       amrapMet: allAmrapMet,
       amrapDetails,
+      missingWeeks,
     }
   }
 

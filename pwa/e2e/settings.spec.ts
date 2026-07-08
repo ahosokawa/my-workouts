@@ -23,7 +23,7 @@ test.describe('Export/Import roundtrip', () => {
 
     const exportedJson = fs.readFileSync(exportPath, 'utf-8')
     const exported = JSON.parse(exportedJson)
-    expect(exported.version).toBe(1)
+    expect(exported.version).toBe(2)
     expect(exported.profile.currentVariant).toBe('bbb')
     expect(exported.profile.cycleNumber).toBe(2)
 

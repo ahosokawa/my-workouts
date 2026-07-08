@@ -300,6 +300,12 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
                         </span>
                       </div>
                     ))}
+                    {result?.missingWeeks.map((w) => (
+                      <div key={`missing-${w}`} className="ml-7 text-[10px] text-[#8e8e93]">
+                        Week {w}: no AMRAP logged{' '}
+                        <span className="text-[var(--color-red)]">✗</span>
+                      </div>
+                    ))}
                   </div>
                 )
               })}

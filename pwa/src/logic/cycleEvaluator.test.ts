@@ -81,6 +81,80 @@ describe('evaluateCycle', () => {
     expect(squatResult.amrapDetails).toHaveLength(3) // one per week
   })
 
+  it('fails a lift missing week 3 (cycle ended early) even when recorded AMRAPs were met', () => {
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
+    // Drop every week-3 session (and its logs) — simulates End Cycle Early at week 2.
+    const week12Sessions = sessions.filter((s) => s.week !== 3)
+    const keptIds = new Set(week12Sessions.map((s) => s.id))
+    const week12Logs = setLogs.filter((l) => keptIds.has(l.sessionId))
+
+    const result = evaluateCycle(week12Sessions, week12Logs, 1)
+
+    expect(result.isSuccessful).toBe(false)
+    for (const lift of MAIN_LIFTS) {
+      expect(result.liftResults[lift].amrapMet).toBe(false)
+      expect(result.liftResults[lift].missingWeeks).toEqual([3])
+    }
+  })
+
+  it('fails a lift with only week 1 recorded (the partial-cycle regression)', () => {
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
+    const week1Sessions = sessions.filter((s) => s.week === 1)
+    const keptIds = new Set(week1Sessions.map((s) => s.id))
+    const week1Logs = setLogs.filter((l) => keptIds.has(l.sessionId))
+
+    const result = evaluateCycle(week1Sessions, week1Logs, 1)
+
+    expect(result.isSuccessful).toBe(false)
+    expect(result.liftResults[MainLift.Squat].missingWeeks).toEqual([2, 3])
+  })
+
+  it('reports empty missingWeeks when all 3 weeks are recorded but one fails', () => {
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 2, 3: 3 }) // week 2 min is 3
+    const result = evaluateCycle(sessions, setLogs, 1)
+
+    expect(result.isSuccessful).toBe(false)
+    expect(result.liftResults[MainLift.Squat].amrapMet).toBe(false)
+    expect(result.liftResults[MainLift.Squat].missingWeeks).toEqual([])
+  })
+
+  it('ignores an AMRAP set that was never completed (pre-filled reps are not evidence)', () => {
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
+    // Week 3 squat AMRAP left unchecked — its actualReps still carry the
+    // pre-filled default, but the set wasn't performed.
+    const logs = setLogs.map((l) =>
+      l.sessionId === `s-c1-${MainLift.Squat}-3` && l.isAMRAP
+        ? { ...l, isCompleted: false, completedAt: null }
+        : l,
+    )
+
+    const result = evaluateCycle(sessions, logs, 1)
+
+    expect(result.liftResults[MainLift.Squat].amrapMet).toBe(false)
+    expect(result.liftResults[MainLift.Squat].missingWeeks).toEqual([3])
+    // Other lifts are unaffected.
+    expect(result.liftResults[MainLift.BenchPress].amrapMet).toBe(true)
+  })
+
+  it('evaluates correctly when a week has duplicate sessions (legacy double-save data)', () => {
+    const { sessions, setLogs } = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
+    // Duplicate the week-1 squat session under a new id, same logs.
+    const dupId = '.dup-s-c1-1-1'
+    sessions.push(makeSession(dupId, MainLift.Squat, 1, 1))
+    for (let i = 0; i < 6; i++) {
+      setLogs.push(makeSetLog(dupId, {
+        isAMRAP: i === 5,
+        actualReps: i === 5 ? 8 : null,
+        isCompleted: true,
+      }))
+    }
+
+    const result = evaluateCycle(sessions, setLogs, 1)
+
+    expect(result.isSuccessful).toBe(true)
+    expect(result.liftResults[MainLift.Squat].missingWeeks).toEqual([])
+  })
+
   it('only evaluates the specified cycle number', () => {
     const cycle1 = buildFullCycle(1, { 1: 8, 2: 5, 3: 3 })
     const cycle2 = buildFullCycle(2, { 1: 2, 2: 1, 3: 0 })

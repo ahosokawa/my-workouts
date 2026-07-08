@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, liftFromDay, displayRound } from '../types'
 import type { DeloadType } from '../types'
@@ -12,6 +12,7 @@ export default function DeloadWorkoutView() {
   const saveWorkout = useStore((s) => s.saveWorkout)
   const [completedSets, setCompletedSets] = useState<Set<number>>(new Set())
   const [showFinishAlert, setShowFinishAlert] = useState(false)
+  const finishingRef = useRef(false)
 
   if (!profile || !profile.deloadType) return null
 
@@ -43,6 +44,21 @@ export default function DeloadWorkoutView() {
   }
 
   function finishDeloadDay() {
+    if (!profile || !lift) return
+    // Double-tap guard: saveWorkout/advanceDeloadDay are not idempotent. The
+    // fresh getState() read catches taps landing after the first call advanced
+    // the deload day (or ended the deload); the ref catches same-tick reentry.
+    const fresh = useStore.getState().profile
+    if (finishingRef.current || !fresh?.isDeloading || fresh.deloadDay !== profile.deloadDay) return
+    finishingRef.current = true
+    try {
+      finishDeloadDayInner()
+    } finally {
+      finishingRef.current = false
+    }
+  }
+
+  function finishDeloadDayInner() {
     if (!profile || !lift) return
     const logEntries = sets.map((s, i) => ({
       exerciseName: liftDisplayName(lift),

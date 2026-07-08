@@ -423,4 +423,27 @@ describe('mergePersistedState — active workout day pin', () => {
     const result = mergePersistedState(persisted, currentState())
     expect(result.activeWorkout.day).toBeNull()
   })
+
+  it('fills null prescription-snapshot fields for a legacy in-flight workout', () => {
+    // Persisted before week/tmLbs/topSetLbs existed — readers must see null
+    // and fall back to live profile values (the pre-snapshot behavior).
+    const persisted = {
+      profile: EXISTING_PROFILE,
+      activeWorkout: prePinActiveWorkout({ day: 2, liftRawValue: MainLift.BenchPress }),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.week).toBeNull()
+    expect(result.activeWorkout.tmLbs).toBeNull()
+    expect(result.activeWorkout.topSetLbs).toBeNull()
+  })
+
+  it('preserves captured snapshot fields', () => {
+    const persisted = {
+      profile: EXISTING_PROFILE,
+      activeWorkout: prePinActiveWorkout({ day: 2, liftRawValue: MainLift.BenchPress, week: 2, tmLbs: 202.5, topSetLbs: null }),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.activeWorkout.week).toBe(2)
+    expect(result.activeWorkout.tmLbs).toBe(202.5)
+  })
 })

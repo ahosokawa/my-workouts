@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useStore } from './store'
 import { startSyncManager } from './logic/syncManager'
+import { storageWasCorrupt, getCorruptBackupRaw } from './logic/safeStorage'
+import StorageRecoveryView from './views/StorageRecoveryView'
 import TabBar from './components/TabBar'
 import OnboardingView from './views/OnboardingView'
 import CycleCompletionView from './views/CycleCompletionView'
@@ -21,6 +23,14 @@ export default function App() {
     const handle = startSyncManager(useStore)
     return handle.stop
   }, [])
+
+  // Persisted data couldn't be parsed — block everything behind recovery until
+  // the user downloads the preserved blob or explicitly starts fresh. Checking
+  // the backup key (not just the session flag) keeps this screen up across
+  // reloads until it's resolved.
+  if (storageWasCorrupt() || getCorruptBackupRaw() !== null) {
+    return <StorageRecoveryView />
+  }
 
   // No profile yet -> onboarding
   if (!profile) {

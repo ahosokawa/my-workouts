@@ -8,6 +8,7 @@ import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
 import { syncOnce } from '../logic/syncManager'
+import { downloadJSON, backupFilename } from '../logic/download'
 
 export default function SettingsView() {
   const profile = useStore((s) => s.profile)
@@ -23,6 +24,7 @@ export default function SettingsView() {
   const cloudSync = useStore((s) => s.cloudSync)
   const setCloudSync = useStore((s) => s.setCloudSync)
   const switchProgram = useStore((s) => s.switchProgram)
+  const resetCycle = useStore((s) => s.resetCycle)
   const workoutActive = useStore((s) => s.activeWorkout.isActive)
 
   const [isEditing, setIsEditing] = useState(false)
@@ -111,7 +113,7 @@ export default function SettingsView() {
   }
 
   function handleResetCycle() {
-    updateProfile({ currentWeek: 1, currentDay: 1, completedDaysThisWeek: [], isCycleComplete: false })
+    resetCycle()
     setShowResetCycle(false)
   }
 
@@ -140,7 +142,7 @@ export default function SettingsView() {
 
   async function handleShareBackup() {
     const json = exportData()
-    const filename = `my-workouts-backup-${new Date().toISOString().slice(0, 10)}.json`
+    const filename = backupFilename()
     const file = new File([json], filename, { type: 'application/json' })
     const shareData = { files: [file], title: 'My Workouts Backup' }
     if (typeof navigator.canShare === 'function' && navigator.canShare(shareData)) {
@@ -151,13 +153,7 @@ export default function SettingsView() {
         // User cancelled or share failed — fall through to download fallback
       }
     }
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadJSON(json, filename)
   }
 
   async function handleEnableSync() {
@@ -235,11 +231,13 @@ export default function SettingsView() {
             {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => (
               <button
                 key={p}
+                disabled={workoutActive}
                 onClick={() => {
+                  if (workoutActive) return
                   if (p === (profile.programType ?? ProgramType.FiveThreeOne)) return
                   setPendingProgram(p)
                 }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
                   (profile.programType ?? ProgramType.FiveThreeOne) === p
                     ? 'bg-[var(--color-accent)] text-white'
                     : 'bg-[#38383a] text-[#8e8e93]'
@@ -250,6 +248,9 @@ export default function SettingsView() {
             ))}
           </div>
         </div>
+        {workoutActive && (
+          <p className="text-xs text-[#8e8e93] pb-2">Finish your active workout before switching programs.</p>
+        )}
       </Section>
 
       {/* Day Order (5/3/1 only — hypertrophy days have fixed focus semantics).
@@ -437,16 +438,7 @@ export default function SettingsView() {
           Share Backup
         </button>
         <button
-          onClick={() => {
-            const json = exportData()
-            const blob = new Blob([json], { type: 'application/json' })
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `my-workouts-backup-${new Date().toISOString().slice(0, 10)}.json`
-            a.click()
-            URL.revokeObjectURL(url)
-          }}
+          onClick={() => downloadJSON(exportData(), backupFilename())}
           className="w-full text-left py-2 text-sm text-[var(--color-accent)]"
         >
           Export Backup (JSON)
@@ -575,15 +567,27 @@ export default function SettingsView() {
         )}
       </Section>
 
-      {/* Actions */}
+      {/* Actions — cycle-position changes are blocked while a workout is in
+          progress so they can't orphan or re-prescribe the active session. */}
       <Section title="Actions">
-        <button onClick={() => setShowResetCycle(true)} className="w-full text-left py-2 text-sm text-[var(--color-orange)]">
+        <button
+          onClick={() => setShowResetCycle(true)}
+          disabled={workoutActive}
+          className="w-full text-left py-2 text-sm text-[var(--color-orange)] disabled:opacity-50"
+        >
           Reset Cycle to Week 1 Day 1
         </button>
         {!profile.isCycleComplete && (
-          <button onClick={() => setShowEndCycle(true)} className="w-full text-left py-2 text-sm text-[var(--color-orange)]">
+          <button
+            onClick={() => setShowEndCycle(true)}
+            disabled={workoutActive}
+            className="w-full text-left py-2 text-sm text-[var(--color-orange)] disabled:opacity-50"
+          >
             End Cycle Early
           </button>
+        )}
+        {workoutActive && (
+          <p className="text-xs text-[#8e8e93] pb-2">Finish your active workout first.</p>
         )}
         <button onClick={() => setShowResetAll(true)} className="w-full text-left py-2 text-sm text-[var(--color-red)]">
           Reset All Data

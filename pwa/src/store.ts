@@ -1,12 +1,21 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { createSafeJSONStorage, STORAGE_KEY } from './logic/safeStorage'
 import type { UserProfile, WorkoutSession, SetLog, WilksEntry, MainLift, AccessoryExercise, ProgramVariant, Units, DeloadType, CloudSyncConfig, SupplementalOverride, ExerciseDef, ProgramType } from './types'
-import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight, isValidDayOrder } from './types'
+import { liftFromDay, MAIN_LIFTS, PhaseType, ProgramType as PT, toStorageLbs, toDisplayWeight } from './types'
 import { roundWeight } from './logic/calculator'
 import { getVariantConfig } from './logic/variants'
 import { getProgramAccessories } from './logic/accessories'
 import { computeWeekAdvance, remainingDays } from './logic/weekOrder'
-import { mainLiftForDay, usesTopSetEngine, UPPER_LOWER_DAY_ORDER } from './logic/hypertrophyCalculator'
+import { usesTopSetEngine, UPPER_LOWER_DAY_ORDER } from './logic/hypertrophyCalculator'
+import { EMPTY_ACTIVE_WORKOUT, emptyPersistedData, normalizePersistedData, pickPersistedData } from './logic/persistedData'
+import type { ActiveWorkout } from './logic/persistedData'
+import { serializeBackup, parseBackup } from './logic/backup'
+
+// Re-exported so existing importers (views, tests) keep working after the
+// move to logic/persistedData.ts.
+export { EMPTY_ACTIVE_WORKOUT } from './logic/persistedData'
+export type { ActiveWorkout } from './logic/persistedData'
 
 // ============================================================
 // Helpers
@@ -24,46 +33,6 @@ function trainingMax(profile: UserProfile, lift: MainLift): number {
     case 4: return profile.pressTM
     default: return profile.squatTM
   }
-}
-
-// ============================================================
-// Active Workout State (survives tab switches)
-// ============================================================
-
-export interface ActiveWorkout {
-  isActive: boolean
-  startTime: number | null
-  // Identity of the workout in progress, pinned at startSession so a mid-session
-  // profile change (settings, cloud sync) can't silently re-point it to another lift.
-  // Both null when no workout is active. liftRawValue is the MainLift value (1-4),
-  // or 0 when the day has no top-set main lift (hypertrophy Pull day).
-  day: number | null
-  liftRawValue: number | null
-  completedMain: number[]      // stored as array, used as Set in component
-  completedAccessory: string[] // stored as array, used as Set in component
-  amrapReps: number
-  accWeights: Record<string, string>
-  accReps: Record<string, string>
-  mainWeights: Record<number, string>  // per-set weight overrides, keyed by set index
-  mainReps: Record<number, string>     // per-set rep overrides, keyed by set index
-  lastSetTime: number | null
-  showRestTimer: boolean
-}
-
-const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
-  isActive: false,
-  startTime: null,
-  day: null,
-  liftRawValue: null,
-  completedMain: [],
-  completedAccessory: [],
-  amrapReps: 0,
-  accWeights: {},
-  accReps: {},
-  mainWeights: {},
-  mainReps: {},
-  lastSetTime: null,
-  showRestTimer: false,
 }
 
 // ============================================================
@@ -95,6 +64,7 @@ interface AppState {
   recalculateTMs: () => void
   advanceDay: (finishedDay?: number) => boolean  // returns true if cycle completed
   selectNextWorkoutDay: (day: number) => void  // pick any remaining day of the current week
+  resetCycle: () => void  // back to Week 1 Day 1, discarding any in-progress workout
   startNewCycle: (variant?: ProgramVariant) => void
   startDeload: (deloadType: DeloadType) => void
   advanceDeloadDay: () => void
@@ -139,91 +109,9 @@ interface AppState {
 
 export function mergePersistedState(persisted: unknown, current: AppState): AppState {
   const state = { ...current, ...(persisted as Partial<AppState>) }
-  // Ensure activeWorkout always has every expected field (handles old persisted shapes)
-  state.activeWorkout = { ...EMPTY_ACTIVE_WORKOUT, ...state.activeWorkout }
-  // Ensure new top-level fields have defaults
-  // One-time migration: populate default accessories for existing users who never customized
-  if (state.profile && !(state as Record<string, unknown>)._migratedAccessories && (state.customAccessories === undefined || state.customAccessories === null)) {
-    const m: Record<number, AccessoryExercise[]> = {}
-    const pt = state.profile.programType ?? PT.FiveThreeOne
-    for (const lift of MAIN_LIFTS) {
-      m[lift] = getProgramAccessories(pt, lift).map((ex) => ({ ...ex }))
-    }
-    state.customAccessories = m
-  }
-  if (state.profile && state.customAccessories !== undefined && state.customAccessories !== null) {
-    (state as Record<string, unknown>)._migratedAccessories = true
-  }
-  if (state.customAccessories === undefined) state.customAccessories = null
-  if (state.customSupplemental === undefined) state.customSupplemental = null
-  if (!state.programAccessoryArchive || typeof state.programAccessoryArchive !== 'object') state.programAccessoryArchive = {}
-  if (!state.programSupplementalArchive || typeof state.programSupplementalArchive !== 'object') state.programSupplementalArchive = {}
-  if (!Array.isArray(state.savedExercises)) state.savedExercises = []
-
-  // Normalize the exercise library to context-free ExerciseDef and union in any
-  // exercises currently in use across customAccessories / customSupplemental so
-  // anything the user has ever defined shows up wherever they pick an exercise.
-  {
-    const byName = new Map<string, ExerciseDef>()
-    const add = (ex: { id: string; name: string; weightType: AccessoryExercise['weightType'] } | undefined) => {
-      if (!ex || !ex.name) return
-      const key = ex.name.toLowerCase()
-      if (byName.has(key)) return
-      byName.set(key, { id: ex.id, name: ex.name, weightType: ex.weightType })
-    }
-    for (const ex of state.savedExercises) add(ex)
-    if (state.customAccessories) {
-      for (const k of Object.keys(state.customAccessories)) {
-        for (const ex of state.customAccessories[Number(k)] ?? []) add(ex)
-      }
-    }
-    if (state.customSupplemental) {
-      for (const k of Object.keys(state.customSupplemental)) {
-        const o = state.customSupplemental[Number(k)]
-        if (o) add(o.exercise)
-      }
-    }
-    state.savedExercises = Array.from(byName.values())
-  }
-  if (state.restNotifyEnabled === undefined) state.restNotifyEnabled = true
-  if (state.restNotifyMinutes === undefined) state.restNotifyMinutes = 3
-  if (state.cloudSync === undefined) state.cloudSync = null
-  // Ensure new profile fields have defaults (variant support)
-  if (state.profile) {
-    const updates: Partial<UserProfile> = {}
-    if (!state.profile.currentVariant) updates.currentVariant = 'fsl'
-    if (state.profile.leaderCycleCount === undefined) updates.leaderCycleCount = 0
-    if (state.profile.anchorCycleCount === undefined) updates.anchorCycleCount = 0
-    if (state.profile.tmPercentage === undefined) updates.tmPercentage = 90
-    if (!state.profile.sex) updates.sex = 'male'
-    if (!state.profile.units) updates.units = 'lbs'
-    if (state.profile.isDeloading === undefined) updates.isDeloading = false
-    if (state.profile.deloadType === undefined) updates.deloadType = null
-    if (state.profile.deloadDay === undefined) updates.deloadDay = 1
-    if (!state.profile.programType) updates.programType = PT.FiveThreeOne
-    if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
-    if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]
-    if (!Array.isArray(state.profile.completedDaysThisWeek)) {
-      // Pre-feature completion was strictly linear, so days before currentDay are done.
-      const cd = state.profile.currentDay ?? 1
-      updates.completedDaysThisWeek = Array.from({ length: Math.max(0, cd - 1) }, (_, i) => i + 1)
-    }
-    if (Object.keys(updates).length > 0) {
-      state.profile = { ...state.profile, ...updates }
-    }
-  }
-
-  // Heal a workout that was already in progress before the day/lift pin fields
-  // existed: pin it to the profile's current position. Best-effort — it matches
-  // the pre-pin behavior and self-corrects on the next startSession.
-  if (state.activeWorkout.isActive && state.activeWorkout.day == null && state.profile) {
-    const pt = state.profile.programType ?? PT.FiveThreeOne
-    state.activeWorkout.day = state.profile.currentDay
-    state.activeWorkout.liftRawValue =
-      mainLiftForDay(pt, state.profile.currentDay, state.profile.dayOrder) ?? 0
-  }
-
-  return state
+  // All field defaulting / one-time migrations live in normalizePersistedData
+  // so backup import heals old shapes identically to rehydration.
+  return { ...state, ...normalizePersistedData(state as unknown as Record<string, unknown>) }
 }
 
 // ============================================================
@@ -233,19 +121,7 @@ export function mergePersistedState(persisted: unknown, current: AppState): AppS
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      profile: null,
-      sessions: [],
-      setLogs: [],
-      wilksEntries: [],
-      activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
-      customAccessories: null,
-      customSupplemental: null,
-      programAccessoryArchive: {},
-      programSupplementalArchive: {},
-      savedExercises: [],
-      restNotifyEnabled: true,
-      restNotifyMinutes: 3,
-      cloudSync: null,
+      ...emptyPersistedData(),
 
       createProfile: (squatRM, benchRM, deadliftRM, pressRM, variant, tmPercentage, sex, units, programType) => {
         const program = programType ?? PT.FiveThreeOne
@@ -365,6 +241,17 @@ export const useStore = create<AppState>()(
         // Only a day that's still pending this week can be selected as next.
         if (!remainingDays(profile.completedDaysThisWeek ?? []).includes(day)) return
         set({ profile: { ...profile, currentDay: day } })
+      },
+
+      resetCycle: () => {
+        const { profile } = get()
+        if (!profile) return
+        // An in-progress workout is pinned to the old cycle position — it
+        // can't survive the reset, so discard it rather than orphan it.
+        set({
+          profile: { ...profile, currentWeek: 1, currentDay: 1, completedDaysThisWeek: [], isCycleComplete: false },
+          activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
+        })
       },
 
       startNewCycle: (variant?: ProgramVariant) => {
@@ -520,6 +407,9 @@ export const useStore = create<AppState>()(
           customSupplemental: nextSupplemental,
           programAccessoryArchive: nextAccessoryArchive,
           programSupplementalArchive: nextSupplementalArchive,
+          // A workout in progress belongs to the old program — discard it so
+          // it can't render against the new program's prescriptions.
+          activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
         })
       },
 
@@ -588,38 +478,29 @@ export const useStore = create<AppState>()(
       },
 
       resetAll: () => {
-        set({ profile: null, sessions: [], setLogs: [], wilksEntries: [], activeWorkout: { ...EMPTY_ACTIVE_WORKOUT }, customAccessories: null, customSupplemental: null, savedExercises: [], cloudSync: null })
+        // Structurally complete: every persisted data field returns to its
+        // initial value (archives and rest-notify settings included).
+        set({ ...emptyPersistedData() })
       },
 
-      exportData: () => {
-        // NOTE: cloudSync is intentionally excluded — it contains a GitHub PAT
-        const { profile, sessions, setLogs, wilksEntries, customAccessories, customSupplemental, savedExercises } = get()
-        return JSON.stringify(
-          { version: 1, exportedAt: new Date().toISOString(), profile, sessions, setLogs, wilksEntries, customAccessories, customSupplemental, savedExercises },
-          null,
-          2,
-        )
-      },
+      exportData: () => serializeBackup(pickPersistedData(get())),
 
       importData: (json: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let data: any
-        try {
-          data = JSON.parse(json)
-        } catch {
-          throw new Error('Invalid backup file')
-        }
-        if (data.version !== 1) throw new Error('Unsupported backup version')
-        // Any cloudSync key in the backup is ignored; current sync config is preserved.
-        set({
-          profile: data.profile,
-          sessions: data.sessions ?? [],
-          setLogs: data.setLogs ?? [],
-          wilksEntries: data.wilksEntries ?? [],
-          customAccessories: data.customAccessories ?? null,
-          customSupplemental: data.customSupplemental ?? null,
-          savedExercises: data.savedExercises ?? [],
-        })
+        // parseBackup throws on malformed/unsupported files; cloudSync in the
+        // file is dropped there, so the device's sync config is never touched.
+        const data = parseBackup(json)
+        // Base on the current data slice so fields a v1 backup doesn't carry
+        // (archives, rest-notify settings) keep their device-local values,
+        // then normalize so an old backup gains every newer field default
+        // immediately — no reload needed. Import always discards any
+        // in-flight workout: it likely doesn't match the imported profile.
+        set(
+          normalizePersistedData({
+            ...pickPersistedData(get()),
+            ...data,
+            activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
+          } as unknown as Record<string, unknown>),
+        )
       },
 
       getTrainingMax: (lift) => {
@@ -635,7 +516,16 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'my-workouts-storage',
+      name: STORAGE_KEY,
+      // Catches corrupt-blob parse failures and preserves the raw data for the
+      // recovery screen instead of silently booting empty (see safeStorage.ts).
+      storage: createSafeJSONStorage(),
+      // Blobs written before versioning carry zustand's default version 0;
+      // the identity migrate accepts them and merge normalizes every
+      // historical shape. version exists so future breaking changes can
+      // migrate explicitly.
+      version: 1,
+      migrate: (persisted) => persisted as AppState,
       merge: mergePersistedState,
     },
   ),

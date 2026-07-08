@@ -105,3 +105,47 @@ describe('computeWeekAdvance', () => {
     expect(r.currentWeek).toBe(1)
   })
 })
+
+describe('computeWeekAdvance — repeated advance is NOT idempotent at week rollover', () => {
+  // Documents why the Finish buttons carry a double-tap guard: advancing the
+  // same finished day twice is harmless mid-week (the day dedups), but at week
+  // rollover the second call lands in the NEW week and re-marks the old day
+  // done there, corrupting week progress. The store behavior is intentionally
+  // unchanged; callers must not double-invoke advanceDay.
+  it('mid-week: repeating the same finished day is a no-op', () => {
+    const first = computeWeekAdvance({
+      completedDaysThisWeek: [1],
+      finishedDay: 2,
+      currentWeek: 1,
+      cycleWeeks: 3,
+    })
+    const second = computeWeekAdvance({
+      completedDaysThisWeek: first.completedDaysThisWeek,
+      finishedDay: 2,
+      currentWeek: first.currentWeek,
+      cycleWeeks: 3,
+    })
+    expect(second).toEqual(first)
+  })
+
+  it('at week rollover: a repeated advance corrupts the new week', () => {
+    const first = computeWeekAdvance({
+      completedDaysThisWeek: [1, 2, 3],
+      finishedDay: 4,
+      currentWeek: 1,
+      cycleWeeks: 3,
+    })
+    expect(first.currentWeek).toBe(2)
+    expect(first.completedDaysThisWeek).toEqual([])
+
+    const second = computeWeekAdvance({
+      completedDaysThisWeek: first.completedDaysThisWeek,
+      finishedDay: 4,
+      currentWeek: first.currentWeek,
+      cycleWeeks: 3,
+    })
+    // Day 4 of the OLD week gets marked done in week 2 — this is the corruption.
+    expect(second.completedDaysThisWeek).toEqual([4])
+    expect(second.currentWeek).toBe(2)
+  })
+})
