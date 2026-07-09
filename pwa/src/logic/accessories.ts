@@ -1,5 +1,5 @@
-import { MainLift, AccessoryWeightType, ProgressionType, ProgramType } from '../types'
-import type { AccessoryExercise, ProgramType as ProgramTypeT } from '../types'
+import { MainLift, AccessoryWeightType, ProgressionType } from '../types'
+import type { AccessoryExercise } from '../types'
 
 // ============================================================
 // Accessory Definitions
@@ -33,14 +33,12 @@ const SHOULDER_PRESS_ACCESSORIES: AccessoryExercise[] = [
   { id: 'row', name: 'DB Bent Over Row', sets: 3, reps: 8, weightType: AccessoryWeightType.Standard },
 ]
 
-/** Get accessories for a given main lift / day */
-export function getAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return SQUAT_ACCESSORIES
-    case MainLift.BenchPress: return BENCH_ACCESSORIES
-    case MainLift.Deadlift: return DEADLIFT_ACCESSORIES
-    case MainLift.ShoulderPress: return SHOULDER_PRESS_ACCESSORIES
-  }
+/** 5/3/1 default accessories keyed by MainLift slot. */
+export const FIVE_THREE_ONE_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: SQUAT_ACCESSORIES,
+  [MainLift.BenchPress]: BENCH_ACCESSORIES,
+  [MainLift.Deadlift]: DEADLIFT_ACCESSORIES,
+  [MainLift.ShoulderPress]: SHOULDER_PRESS_ACCESSORIES,
 }
 
 // ============================================================
@@ -146,14 +144,12 @@ const HYPERTROPHY_OHP_DAY: AccessoryExercise[] = [
     notes: 'Pull to face, elbows high. Rear delts.' },
 ]
 
-/** Hypertrophy default accessories for a given MainLift slot. */
-export function getHypertrophyAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return HYPERTROPHY_SQUAT_DAY
-    case MainLift.BenchPress: return HYPERTROPHY_BENCH_DAY
-    case MainLift.Deadlift: return HYPERTROPHY_DEADLIFT_DAY
-    case MainLift.ShoulderPress: return HYPERTROPHY_OHP_DAY
-  }
+/** Hypertrophy default accessories keyed by MainLift slot. */
+export const HYPERTROPHY_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: HYPERTROPHY_SQUAT_DAY,
+  [MainLift.BenchPress]: HYPERTROPHY_BENCH_DAY,
+  [MainLift.Deadlift]: HYPERTROPHY_DEADLIFT_DAY,
+  [MainLift.ShoulderPress]: HYPERTROPHY_OHP_DAY,
 }
 
 // ============================================================
@@ -253,21 +249,10 @@ const UPPER_LOWER_DEADLIFT_DAY: AccessoryExercise[] = [
     notes: 'Bend knees if straight legs are too hard. No swinging.' },
 ]
 
-/** 4-Day Upper/Lower default accessories for a given MainLift slot. */
-export function getUpperLowerAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return UPPER_LOWER_SQUAT_DAY
-    case MainLift.BenchPress: return UPPER_LOWER_BENCH_DAY
-    case MainLift.Deadlift: return UPPER_LOWER_DEADLIFT_DAY
-    case MainLift.ShoulderPress: return UPPER_LOWER_OHP_DAY
-  }
-}
-
-/** Program-aware default accessories for a MainLift slot. */
-export function getProgramAccessories(programType: ProgramTypeT, lift: MainLift): AccessoryExercise[] {
-  switch (programType) {
-    case ProgramType.Hypertrophy: return getHypertrophyAccessories(lift)
-    case ProgramType.UpperLower: return getUpperLowerAccessories(lift)
-    default: return getAccessories(lift)
-  }
+/** 4-Day Upper/Lower default accessories keyed by MainLift slot. */
+export const UPPER_LOWER_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: UPPER_LOWER_SQUAT_DAY,
+  [MainLift.BenchPress]: UPPER_LOWER_BENCH_DAY,
+  [MainLift.Deadlift]: UPPER_LOWER_DEADLIFT_DAY,
+  [MainLift.ShoulderPress]: UPPER_LOWER_OHP_DAY,
 }

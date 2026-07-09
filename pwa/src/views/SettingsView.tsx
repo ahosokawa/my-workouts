@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
-import { usesTopSetEngine, dayLabel, programLabel } from '../logic/hypertrophyCalculator'
+import { PROGRAMS, usesTopSetEngine, dayLabel, programLabel } from '../logic/programs'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
@@ -228,7 +228,7 @@ export default function SettingsView() {
         <div className="flex items-center justify-between py-2">
           <span className="text-sm">Training Program</span>
           <div className="flex flex-wrap gap-1 justify-end">
-            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => (
+            {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => (
               <button
                 key={p}
                 disabled={workoutActive}
@@ -243,7 +243,7 @@ export default function SettingsView() {
                     : 'bg-[#38383a] text-[#8e8e93]'
                 }`}
               >
-                {p === ProgramType.UpperLower ? 'Upper/Lower' : p === ProgramType.Hypertrophy ? 'Hypertrophy' : '5/3/1'}
+                {PROGRAMS[p].shortLabel}
               </button>
             ))}
           </div>

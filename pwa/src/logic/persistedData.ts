@@ -19,8 +19,7 @@ import type {
   ProgramType,
 } from '../types'
 import { MAIN_LIFTS, ProgramType as PT, isValidDayOrder } from '../types'
-import { getProgramAccessories } from './accessories'
-import { mainLiftForDay } from './hypertrophyCalculator'
+import { getProgramAccessories, mainLiftForDay } from './programs'
 
 // ============================================================
 // Active Workout State (survives tab switches)

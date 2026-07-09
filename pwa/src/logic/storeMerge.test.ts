@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mergePersistedState } from '../store'
 import type { UserProfile, AccessoryExercise } from '../types'
 import { MainLift, MAIN_LIFTS, AccessoryWeightType } from '../types'
-import { getAccessories } from './accessories'
+import { FIVE_THREE_ONE_ACCESSORIES } from './accessories'
 
 // Minimal valid profile for simulating existing users
 const EXISTING_PROFILE: UserProfile = {
@@ -80,10 +80,10 @@ describe('mergePersistedState — accessory migration', () => {
 
     expect(result.customAccessories).not.toBeNull()
     for (const lift of MAIN_LIFTS) {
-      const expected = getAccessories(lift)
+      const expected = FIVE_THREE_ONE_ACCESSORIES[lift]
       const actual = result.customAccessories![lift]
       expect(actual).toHaveLength(expected.length)
-      expect(actual.map((a: AccessoryExercise) => a.name)).toEqual(expected.map((e) => e.name))
+      expect(actual.map((a: AccessoryExercise) => a.name)).toEqual(expected.map((e: AccessoryExercise) => e.name))
     }
   })
 
@@ -97,7 +97,7 @@ describe('mergePersistedState — accessory migration', () => {
 
     expect(result.customAccessories).not.toBeNull()
     for (const lift of MAIN_LIFTS) {
-      const expected = getAccessories(lift)
+      const expected = FIVE_THREE_ONE_ACCESSORIES[lift]
       const actual = result.customAccessories![lift]
       expect(actual).toHaveLength(expected.length)
     }

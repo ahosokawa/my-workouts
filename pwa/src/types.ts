@@ -215,6 +215,17 @@ export interface UserProfile {
   hypertrophyTopSets?: Partial<Record<MainLift, number>>
 }
 
+/** The stored training max (lbs) for a main lift. Single source for the
+ *  lift → TM-field mapping. */
+export function trainingMaxFor(profile: UserProfile, lift: MainLift): number {
+  switch (lift) {
+    case MainLift.Squat: return profile.squatTM
+    case MainLift.BenchPress: return profile.benchTM
+    case MainLift.Deadlift: return profile.deadliftTM
+    case MainLift.ShoulderPress: return profile.pressTM
+  }
+}
+
 export interface WorkoutSession {
   id: string
   date: string             // ISO date

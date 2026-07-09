@@ -13,8 +13,7 @@ import {
 import type { AccessoryExercise, ExerciseDef, SupplementalOverride, Units, ProgramType as ProgramTypeT, ProgressionType as ProgressionTypeT } from '../types'
 import type { VariantConfig } from '../logic/variants'
 import { roundWeight } from '../logic/calculator'
-import { getProgramAccessories } from '../logic/accessories'
-import { dayLabel, dayHasTopSetMain, usesTopSetEngine, UPPER_LOWER_DAY_ORDER } from '../logic/hypertrophyCalculator'
+import { dayLabel, dayHasTopSetMain, usesTopSetEngine, getProgram, getProgramAccessories, effectiveDayOrder as programDayOrder } from '../logic/programs'
 import ExerciseDefFields from './ExerciseDefFields'
 import ExerciseLibraryList from './ExerciseLibraryList'
 import { accessorySecondary } from './exerciseFormat'
@@ -56,9 +55,8 @@ export default function WorkoutPlanEditor({
   const savedExercises = useStore((s) => s.savedExercises)
   const addSavedExercise = useStore((s) => s.addSavedExercise)
   const isTopSetProgram = usesTopSetEngine(programType)
-  // Upper/Lower trains in a fixed Bench→Squat→OHP→Deadlift order; other programs use the
-  // passed-in order (5/3/1) or the canonical MAIN_LIFTS default (hypertrophy).
-  const effectiveDayOrder = programType === ProgramType.UpperLower ? UPPER_LOWER_DAY_ORDER : dayOrder
+  // Fixed-order programs dictate the week's day→lift order; 5/3/1 uses the passed-in user order.
+  const effectiveDayOrder = programDayOrder(getProgram(programType), dayOrder)
 
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set())
 

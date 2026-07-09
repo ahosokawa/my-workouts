@@ -10,16 +10,17 @@ import {
   MainLift as ML,
   ProgramType,
   liftDisplayName,
+  trainingMaxFor,
 } from '../types'
 import { prescribedSets } from './calculator'
+import { hypertrophyMainSets } from './hypertrophyCalculator'
 import {
   dayLabel,
-  hypertrophyMainSets,
+  getProgramAccessories,
   mainLiftForDay,
   topSetRepRange,
   usesTopSetEngine,
-} from './hypertrophyCalculator'
-import { getAccessories, getProgramAccessories } from './accessories'
+} from './programs'
 
 export interface UpcomingWorkout {
   week: number
@@ -31,15 +32,6 @@ export interface UpcomingWorkout {
   supplementalSets: PrescribedSet[]
   supplementalDisplayName?: string
   accessories: AccessoryExercise[]
-}
-
-function trainingMaxFor(profile: UserProfile, lift: MainLift): number {
-  switch (lift) {
-    case ML.Squat: return profile.squatTM
-    case ML.BenchPress: return profile.benchTM
-    case ML.Deadlift: return profile.deadliftTM
-    case ML.ShoulderPress: return profile.pressTM
-  }
 }
 
 function buildOne(
@@ -95,7 +87,7 @@ function buildOne(
   const mainSets = all.filter((s) => !s.isSupplemental)
   const supplementalSets = all.filter((s) => s.isSupplemental)
   const supplementalDisplayName = suppOverride?.exercise.name ?? liftDisplayName(lift)
-  const accessories = customAccessories?.[lift] ?? getAccessories(lift)
+  const accessories = customAccessories?.[lift] ?? getProgramAccessories(programType, lift)
 
   return {
     week,

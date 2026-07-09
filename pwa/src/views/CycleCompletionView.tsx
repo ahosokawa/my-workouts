@@ -4,8 +4,7 @@ import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVa
 import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
-import { mainLiftForDay, usesTopSetEngine, programLabel, programDescription } from '../logic/hypertrophyCalculator'
-import { getProgramAccessories } from '../logic/accessories'
+import { PROGRAMS, mainLiftForDay, usesTopSetEngine, programLabel, programDescription, getProgramAccessories } from '../logic/programs'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
@@ -345,7 +344,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
         </div>
         <div className="px-4 pb-3">
           <div className="grid grid-cols-1 gap-2 mb-3">
-            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => {
+            {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => {
               const isSelected = selectedProgramType === p
               return (
                 <button

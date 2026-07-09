@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, liftShortName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/hypertrophyCalculator'
+import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
+import { getProgram, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
   recentMainLiftTopSets, lastAccessorySession,
@@ -19,15 +20,6 @@ import { requestNotificationPermission } from '../notifications'
 import MainSetCard from '../components/MainSetCard'
 import CollapsibleSection from '../components/CollapsibleSection'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
-
-/** Short label for a next-workout picker chip. */
-function dayChipLabel(programType: ProgramType, day: number, dayOrder?: MainLift[]): string {
-  if (programType === ProgramType.Hypertrophy) {
-    return ['Squat', 'Push', 'Hinge', 'Pull'][day - 1] ?? `Day ${day}`
-  }
-  const lift = mainLiftForDay(programType, day, dayOrder)
-  return lift ? liftShortName(lift) : `Day ${day}`
-}
 
 export default function WorkoutView() {
   const profile = useStore((s) => s.profile)
@@ -577,7 +569,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                           : 'bg-[#38383a] text-white'
                     }`}
                   >
-                    {dayChipLabel(programType, d, profile.dayOrder)}
+                    {programDayChipLabel(getProgram(programType), d, profile.dayOrder)}
                     {done ? ' ✓' : ''}
                   </button>
                 )
