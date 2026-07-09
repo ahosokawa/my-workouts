@@ -59,6 +59,17 @@ describe('Upper/Lower accessories', () => {
     expect(UPPER_LOWER_ACCESSORIES[MainLift.ShoulderPress].map((a) => a.name)).toContain('Chest-Supported DB Row')
     expect(UPPER_LOWER_ACCESSORIES[MainLift.Deadlift].map((a) => a.name)).toContain('Hanging Leg Raise')
   })
+
+  it('reflects the revised program: One-Arm DB Row, Band Triceps Pushdown, no Lower A lateral raise, Front Squat 6-8', () => {
+    const benchNames = UPPER_LOWER_ACCESSORIES[MainLift.BenchPress].map((a) => a.name)
+    expect(benchNames.indexOf('One-Arm DB Row')).toBe(benchNames.indexOf('Incline DB Bench Press') + 1)
+    expect(UPPER_LOWER_ACCESSORIES[MainLift.Squat].map((a) => a.name)).not.toContain('DB Lateral Raise')
+    const ohpNames = UPPER_LOWER_ACCESSORIES[MainLift.ShoulderPress].map((a) => a.name)
+    expect(ohpNames.indexOf('Band Triceps Pushdown')).toBe(ohpNames.indexOf('DB Lateral Raise') + 1)
+    const frontSquat = UPPER_LOWER_ACCESSORIES[MainLift.Deadlift].find((a) => a.name === 'Front Squat')!
+    expect(frontSquat.repRangeMin).toBe(6)
+    expect(frontSquat.repRangeMax).toBe(8)
+  })
 })
 
 describe('getProgramAccessories', () => {
