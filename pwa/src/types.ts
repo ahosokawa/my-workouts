@@ -299,9 +299,21 @@ export interface ExerciseDef {
   weightType: AccessoryWeightType
 }
 
+// ============================================================
+// Muscle groups (weekly-volume metrics)
+// ============================================================
+
+export const MUSCLE_GROUPS = [
+  'quads', 'hamstrings', 'glutes', 'chest', 'back',
+  'shoulders', 'biceps', 'triceps', 'calves', 'core', 'other',
+] as const
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number]
+
 /** Accessory-specific exercise: an ExerciseDef plus sets/reps prescription.
  *  Optional `repRangeMin`/`repRangeMax` enable rep-range prescriptions (e.g. "8-10").
- *  When absent, `reps` is the fixed target. `progressionType` drives autoprogression. */
+ *  When absent, `reps` is the fixed target. `progressionType` drives autoprogression.
+ *  `muscleGroups` optionally overrides the name-based inference used by the
+ *  weekly-volume metrics. */
 export interface AccessoryExercise extends ExerciseDef {
   sets: number
   reps: number
@@ -309,6 +321,7 @@ export interface AccessoryExercise extends ExerciseDef {
   repRangeMax?: number
   progressionType?: ProgressionType
   notes?: string
+  muscleGroups?: MuscleGroup[]
 }
 
 /** Per-day override that swaps the supplemental lift for a different exercise.

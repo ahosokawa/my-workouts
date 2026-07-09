@@ -5,8 +5,9 @@ import { MAIN_LIFTS, liftDisplayName, displayRound } from '../types'
 import { bestAmrapE1RM } from '../logic/personalRecords'
 import { calculateWilks, formatWilks } from '../logic/wilks'
 import PRBoardView from './PRBoardView'
+import TrendsView from './TrendsView'
 
-type Tab = 'e1rm' | 'board' | 'wilks'
+type Tab = 'e1rm' | 'board' | 'wilks' | 'trends'
 
 export default function PRsView() {
   const [tab, setTab] = useState<Tab>('e1rm')
@@ -25,6 +26,7 @@ export default function PRsView() {
     { key: 'e1rm', label: 'Est. 1RM' },
     { key: 'board', label: 'PR Board' },
     { key: 'wilks', label: 'Wilks' },
+    { key: 'trends', label: 'Trends' },
   ]
 
   return (
@@ -113,6 +115,10 @@ export default function PRsView() {
       )}
 
       {tab === 'board' && <PRBoardView />}
+
+      {tab === 'trends' && (
+        profile ? <TrendsView profile={profile} /> : <EmptyState title="No Trends Yet" message="Set up a profile to see training trends." />
+      )}
 
       {tab === 'wilks' && (
         (() => {
