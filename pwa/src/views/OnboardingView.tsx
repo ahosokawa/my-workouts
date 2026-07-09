@@ -4,8 +4,7 @@ import { MAIN_LIFTS, ProgramVariant, PhaseType, ProgramType, toStorageLbs } from
 import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT, MainLift } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { getProgramAccessories } from '../logic/accessories'
-import { usesTopSetEngine, programLabel, programDescription } from '../logic/hypertrophyCalculator'
+import { PROGRAMS, getProgramAccessories, usesTopSetEngine, programLabel, programDescription } from '../logic/programs'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
 
@@ -157,7 +156,7 @@ export default function OnboardingView() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 mb-4">
-          {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => {
+          {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => {
             const isSelected = selectedProgram === p
             return (
               <button

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mergePersistedState } from '../store'
 import type { UserProfile, AccessoryExercise } from '../types'
 import { MainLift, MAIN_LIFTS, AccessoryWeightType } from '../types'
-import { getAccessories } from './accessories'
+import { FIVE_THREE_ONE_ACCESSORIES } from './accessories'
 
 // Minimal valid profile for simulating existing users
 const EXISTING_PROFILE: UserProfile = {
@@ -80,10 +80,10 @@ describe('mergePersistedState — accessory migration', () => {
 
     expect(result.customAccessories).not.toBeNull()
     for (const lift of MAIN_LIFTS) {
-      const expected = getAccessories(lift)
+      const expected = FIVE_THREE_ONE_ACCESSORIES[lift]
       const actual = result.customAccessories![lift]
       expect(actual).toHaveLength(expected.length)
-      expect(actual.map((a: AccessoryExercise) => a.name)).toEqual(expected.map((e) => e.name))
+      expect(actual.map((a: AccessoryExercise) => a.name)).toEqual(expected.map((e: AccessoryExercise) => e.name))
     }
   })
 
@@ -97,7 +97,7 @@ describe('mergePersistedState — accessory migration', () => {
 
     expect(result.customAccessories).not.toBeNull()
     for (const lift of MAIN_LIFTS) {
-      const expected = getAccessories(lift)
+      const expected = FIVE_THREE_ONE_ACCESSORIES[lift]
       const actual = result.customAccessories![lift]
       expect(actual).toHaveLength(expected.length)
     }
@@ -445,5 +445,136 @@ describe('mergePersistedState — active workout day pin', () => {
     const result = mergePersistedState(persisted, currentState())
     expect(result.activeWorkout.week).toBe(2)
     expect(result.activeWorkout.tmLbs).toBe(202.5)
+  })
+})
+
+// ============================================================
+// Upper/Lower accessory revision migration
+// ============================================================
+
+describe('mergePersistedState — Upper/Lower accessory revision', () => {
+  const UL_PROFILE: UserProfile = { ...EXISTING_PROFILE, programType: 'upper_lower', cycleWeeks: 7 }
+  const flag = (r: unknown) => (r as { _migratedUpperLowerPlan?: boolean })._migratedUpperLowerPlan
+
+  // Old default lists as they exist in live users' customAccessories
+  const oldPlan = (): Record<number, AccessoryExercise[]> => ({
+    [MainLift.Squat]: [
+      { id: 'ul-rdl', name: 'Romanian Deadlift', weightType: AccessoryWeightType.Barbell, sets: 3, reps: 9, repRangeMin: 8, repRangeMax: 10, progressionType: 'double_progression' },
+      { id: 'ul-lat-raise-l', name: 'DB Lateral Raise', weightType: AccessoryWeightType.Standard, sets: 3, reps: 13, repRangeMin: 12, repRangeMax: 15, progressionType: 'double_progression' },
+    ],
+    [MainLift.BenchPress]: [
+      { id: 'ul-pullup', name: 'Pull-Ups', weightType: AccessoryWeightType.Bodyweight, sets: 4, reps: 7, repRangeMin: 6, repRangeMax: 8, progressionType: 'reps_then_load' },
+      { id: 'ul-incline-db', name: 'Incline DB Bench Press', weightType: AccessoryWeightType.Standard, sets: 3, reps: 9, repRangeMin: 8, repRangeMax: 10, progressionType: 'double_progression' },
+      { id: 'ul-curl', name: 'DB Bicep Curl', weightType: AccessoryWeightType.Standard, sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12, progressionType: 'double_progression' },
+    ],
+    [MainLift.Deadlift]: [
+      { id: 'ul-front-sq', name: 'Front Squat', weightType: AccessoryWeightType.Barbell, sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12, progressionType: 'double_progression' },
+    ],
+    [MainLift.ShoulderPress]: [
+      { id: 'ul-lat-raise-b', name: 'DB Lateral Raise', weightType: AccessoryWeightType.Standard, sets: 4, reps: 13, repRangeMin: 12, repRangeMax: 15, progressionType: 'double_progression' },
+      { id: 'ul-facepull', name: 'Band Facepull', weightType: AccessoryWeightType.NoWeight, sets: 3, reps: 17, repRangeMin: 15, repRangeMax: 20, progressionType: 'reps_only' },
+    ],
+  })
+
+  it('applies all four revisions to an unmodified live plan', () => {
+    const result = mergePersistedState({ profile: UL_PROFILE, customAccessories: oldPlan() }, currentState())
+    const acc = result.customAccessories!
+    // Upper A: One-Arm DB Row inserted after Incline
+    const benchNames = acc[MainLift.BenchPress].map((e) => e.name)
+    expect(benchNames).toEqual(['Pull-Ups', 'Incline DB Bench Press', 'One-Arm DB Row', 'DB Bicep Curl'])
+    // Lower A: default lateral raise removed
+    expect(acc[MainLift.Squat].map((e) => e.name)).toEqual(['Romanian Deadlift'])
+    // Upper B: Band Triceps Pushdown inserted after lateral raise
+    expect(acc[MainLift.ShoulderPress].map((e) => e.name)).toEqual(['DB Lateral Raise', 'Band Triceps Pushdown', 'Band Facepull'])
+    // Lower B: Front Squat retargeted to 6-8
+    const fs = acc[MainLift.Deadlift][0]
+    expect(fs.repRangeMin).toBe(6)
+    expect(fs.repRangeMax).toBe(8)
+    expect(fs.reps).toBe(7)
+    expect(flag(result)).toBe(true)
+  })
+
+  it('respects user customizations: renamed lat raise kept, edited Front Squat range kept, no duplicate row', () => {
+    const plan = oldPlan()
+    plan[MainLift.Squat][1] = { ...plan[MainLift.Squat][1], name: 'Cable Lateral Raise' }
+    plan[MainLift.Deadlift][0] = { ...plan[MainLift.Deadlift][0], repRangeMin: 8, repRangeMax: 10 }
+    plan[MainLift.BenchPress].push({ id: 'custom-row', name: 'One-Arm DB Row', weightType: AccessoryWeightType.Standard, sets: 4, reps: 10 })
+    const result = mergePersistedState({ profile: UL_PROFILE, customAccessories: plan }, currentState())
+    const acc = result.customAccessories!
+    expect(acc[MainLift.Squat].map((e) => e.name)).toContain('Cable Lateral Raise')
+    expect(acc[MainLift.Deadlift][0].repRangeMin).toBe(8)
+    // No duplicate insert — the user's own One-Arm DB Row is the only one
+    expect(acc[MainLift.BenchPress].filter((e) => e.name === 'One-Arm DB Row')).toHaveLength(1)
+    expect(acc[MainLift.BenchPress].find((e) => e.name === 'One-Arm DB Row')!.sets).toBe(4)
+  })
+
+  it('skips the live-plan revision while a workout is active, and retries later', () => {
+    const persisted = {
+      profile: UL_PROFILE,
+      activeWorkout: { isActive: true, startTime: 1, day: 1, liftRawValue: 2 },
+      customAccessories: oldPlan(),
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.customAccessories![MainLift.BenchPress].map((e) => e.name)).not.toContain('One-Arm DB Row')
+    expect(flag(result)).toBeUndefined()
+    const after = mergePersistedState({ ...result, activeWorkout: { ...result.activeWorkout, isActive: false } }, currentState())
+    expect(after.customAccessories![MainLift.BenchPress].map((e) => e.name)).toContain('One-Arm DB Row')
+    expect(flag(after)).toBe(true)
+  })
+
+  it('revises the archived Upper/Lower plan when another program is live, leaving the live plan alone', () => {
+    const persisted = {
+      profile: EXISTING_PROFILE, // 5/3/1 live
+      customAccessories: { [MainLift.BenchPress]: [{ id: 'incline', name: 'Incline DB Bench Press', weightType: AccessoryWeightType.Standard, sets: 3, reps: 12 }] },
+      programAccessoryArchive: { upper_lower: oldPlan() },
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.programAccessoryArchive.upper_lower![MainLift.BenchPress].map((e) => e.name)).toContain('One-Arm DB Row')
+    expect(result.customAccessories![MainLift.BenchPress].map((e) => e.name)).not.toContain('One-Arm DB Row')
+    expect(flag(result)).toBe(true)
+  })
+
+  it('is idempotent — a second normalize changes nothing', () => {
+    const once = mergePersistedState({ profile: UL_PROFILE, customAccessories: oldPlan() }, currentState())
+    const twice = mergePersistedState({ ...once }, currentState())
+    expect(twice.customAccessories).toEqual(once.customAccessories)
+    expect(flag(twice)).toBe(true)
+  })
+})
+
+// ============================================================
+// Deload trigger fields
+// ============================================================
+
+describe('mergePersistedState — deload trigger fields', () => {
+  it('derives lastDeloadEndedAt from the newest week-0 session', () => {
+    const persisted = {
+      profile: EXISTING_PROFILE,
+      sessions: [
+        { id: 'a', date: '2026-01-05T00:00:00.000Z', liftRawValue: 1, week: 0, cycleNumber: 1, durationSeconds: 0 },
+        { id: 'b', date: '2026-03-01T00:00:00.000Z', liftRawValue: 2, week: 0, cycleNumber: 2, durationSeconds: 0 },
+        { id: 'c', date: '2026-04-01T00:00:00.000Z', liftRawValue: 3, week: 1, cycleNumber: 3, durationSeconds: 0 },
+      ],
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.profile!.lastDeloadEndedAt).toBe('2026-03-01T00:00:00.000Z')
+  })
+
+  it('lastDeloadEndedAt is null when no deload sessions exist; preserved when already set', () => {
+    const none = mergePersistedState({ profile: EXISTING_PROFILE, sessions: [] }, currentState())
+    expect(none.profile!.lastDeloadEndedAt).toBeNull()
+
+    const kept = mergePersistedState(
+      { profile: { ...EXISTING_PROFILE, lastDeloadEndedAt: '2026-05-01T00:00:00.000Z' }, sessions: [] },
+      currentState(),
+    )
+    expect(kept.profile!.lastDeloadEndedAt).toBe('2026-05-01T00:00:00.000Z')
+  })
+
+  it('deloadCadenceWeeks defaults to 7 and is preserved when set', () => {
+    const defaulted = mergePersistedState({ profile: EXISTING_PROFILE }, currentState())
+    expect(defaulted.profile!.deloadCadenceWeeks).toBe(7)
+    const kept = mergePersistedState({ profile: { ...EXISTING_PROFILE, deloadCadenceWeeks: 5 } }, currentState())
+    expect(kept.profile!.deloadCadenceWeeks).toBe(5)
   })
 })

@@ -3,7 +3,8 @@ import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
-import { usesTopSetEngine, dayLabel, programLabel } from '../logic/hypertrophyCalculator'
+import { PROGRAMS, usesTopSetEngine, dayLabel, programLabel } from '../logic/programs'
+import { DEFAULT_DELOAD_CADENCE_WEEKS } from '../logic/deloadTriggers'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
@@ -228,7 +229,7 @@ export default function SettingsView() {
         <div className="flex items-center justify-between py-2">
           <span className="text-sm">Training Program</span>
           <div className="flex flex-wrap gap-1 justify-end">
-            {([ProgramType.FiveThreeOne, ProgramType.Hypertrophy, ProgramType.UpperLower] as ProgramTypeT[]).map((p) => (
+            {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => (
               <button
                 key={p}
                 disabled={workoutActive}
@@ -243,7 +244,7 @@ export default function SettingsView() {
                     : 'bg-[#38383a] text-[#8e8e93]'
                 }`}
               >
-                {p === ProgramType.UpperLower ? 'Upper/Lower' : p === ProgramType.Hypertrophy ? 'Hypertrophy' : '5/3/1'}
+                {PROGRAMS[p].shortLabel}
               </button>
             ))}
           </div>
@@ -273,6 +274,34 @@ export default function SettingsView() {
         <Row label="Cycle" value={String(profile.cycleNumber)} />
         <Row label="Week" value={`${profile.currentWeek} of ${profile.cycleWeeks ?? 3}`} />
         <Row label="Day" value={`${profile.currentDay} – ${liftDay(profile.currentDay)}`} />
+      </Section>
+
+      {/* Deload */}
+      <Section title="Deload">
+        <Row
+          label="Last deload"
+          value={profile.lastDeloadEndedAt ? formatRelative(profile.lastDeloadEndedAt) : 'Never'}
+        />
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Suggest a deload every</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => updateProfile({ deloadCadenceWeeks: Math.max(3, (profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS) - 1) })}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+            >
+              −
+            </button>
+            <span className="text-sm tabular-nums w-16 text-center">
+              {profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS} wks
+            </span>
+            <button
+              onClick={() => updateProfile({ deloadCadenceWeeks: Math.min(12, (profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS) + 1) })}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+            >
+              +
+            </button>
+          </div>
+        </div>
       </Section>
 
       {/* Body Weight & Sex */}

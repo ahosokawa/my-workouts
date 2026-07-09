@@ -213,6 +213,23 @@ export interface UserProfile {
   // Current top-set weight (stored in lbs) per main lift for hypertrophy program.
   // Drives next-session prescription; updated after each session via progression algo.
   hypertrophyTopSets?: Partial<Record<MainLift, number>>
+  // ISO date the last deload/TM-test week finished. Migrated from the newest
+  // week-0 session when absent; null = never deloaded (time-based deload
+  // suggestions then measure from createdAt).
+  lastDeloadEndedAt?: string | null
+  // Weeks between deload suggestions (time-based trigger). Default 7.
+  deloadCadenceWeeks?: number
+}
+
+/** The stored training max (lbs) for a main lift. Single source for the
+ *  lift → TM-field mapping. */
+export function trainingMaxFor(profile: UserProfile, lift: MainLift): number {
+  switch (lift) {
+    case MainLift.Squat: return profile.squatTM
+    case MainLift.BenchPress: return profile.benchTM
+    case MainLift.Deadlift: return profile.deadliftTM
+    case MainLift.ShoulderPress: return profile.pressTM
+  }
 }
 
 export interface WorkoutSession {
@@ -282,9 +299,21 @@ export interface ExerciseDef {
   weightType: AccessoryWeightType
 }
 
+// ============================================================
+// Muscle groups (weekly-volume metrics)
+// ============================================================
+
+export const MUSCLE_GROUPS = [
+  'quads', 'hamstrings', 'glutes', 'chest', 'back',
+  'shoulders', 'biceps', 'triceps', 'calves', 'core', 'other',
+] as const
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number]
+
 /** Accessory-specific exercise: an ExerciseDef plus sets/reps prescription.
  *  Optional `repRangeMin`/`repRangeMax` enable rep-range prescriptions (e.g. "8-10").
- *  When absent, `reps` is the fixed target. `progressionType` drives autoprogression. */
+ *  When absent, `reps` is the fixed target. `progressionType` drives autoprogression.
+ *  `muscleGroups` optionally overrides the name-based inference used by the
+ *  weekly-volume metrics. */
 export interface AccessoryExercise extends ExerciseDef {
   sets: number
   reps: number
@@ -292,6 +321,7 @@ export interface AccessoryExercise extends ExerciseDef {
   repRangeMax?: number
   progressionType?: ProgressionType
   notes?: string
+  muscleGroups?: MuscleGroup[]
 }
 
 /** Per-day override that swaps the supplemental lift for a different exercise.

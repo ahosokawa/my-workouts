@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, liftShortName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
+import { liftDisplayName, AccessoryWeightType, DeloadType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { hypertrophyMainSets, mainLiftForDay, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/hypertrophyCalculator'
+import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
+import { getProgram, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
+import { deloadSuggestion } from '../logic/deloadTriggers'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
   recentMainLiftTopSets, lastAccessorySession,
@@ -19,15 +21,6 @@ import { requestNotificationPermission } from '../notifications'
 import MainSetCard from '../components/MainSetCard'
 import CollapsibleSection from '../components/CollapsibleSection'
 import { useElapsedTimer } from '../hooks/useElapsedTimer'
-
-/** Short label for a next-workout picker chip. */
-function dayChipLabel(programType: ProgramType, day: number, dayOrder?: MainLift[]): string {
-  if (programType === ProgramType.Hypertrophy) {
-    return ['Squat', 'Push', 'Hinge', 'Pull'][day - 1] ?? `Day ${day}`
-  }
-  const lift = mainLiftForDay(programType, day, dayOrder)
-  return lift ? liftShortName(lift) : `Day ${day}`
-}
 
 export default function WorkoutView() {
   const profile = useStore((s) => s.profile)
@@ -48,8 +41,12 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const customAccessories = useStore((s) => s.customAccessories)
   const customSupplemental = useStore((s) => s.customSupplemental)
 
+  const startDeload = useStore((s) => s.startDeload)
+
   const elapsed = useElapsedTimer(aw.isActive, aw.startTime)
   const [showFinishAlert, setShowFinishAlert] = useState(false)
+  const [deloadBannerDismissed, setDeloadBannerDismissed] = useState(false)
+  const [showDeloadConfirm, setShowDeloadConfirm] = useState(false)
   const finishingRef = useRef(false)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
@@ -531,10 +528,59 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const completedDays = profile.completedDaysThisWeek ?? []
   const showDayPicker = !aw.isActive && completedDays.length < 3
 
+  // Deload trigger banner (spec §6.1) — only between workouts. This view never
+  // renders while deloading (App swaps in DeloadWorkoutView).
+  const suggestedDeload = !aw.isActive
+    ? deloadSuggestion(profile, setLogs, getProgram(programType), new Date())
+    : null
+
   // 5/3/1 always needs a lift; hypertrophy day 4 (Pull Focus) has no top-set main.
   if (!lift && !isTopSetProgram) return null
   return (
     <div className="p-4 pb-2 space-y-4">
+      {/* Deload suggestion banner */}
+      {suggestedDeload && !deloadBannerDismissed && !aw.isActive && (
+        <div className="bg-[#1c1c1e] rounded-xl p-4 border border-[var(--color-orange)]">
+          <div className="text-sm font-semibold mb-1">Time for a deload?</div>
+          <p className="text-xs text-[#8e8e93] mb-3">{suggestedDeload.message}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowDeloadConfirm(true)}
+              className="flex-1 py-2 rounded-lg bg-[var(--color-accent)] text-xs font-semibold text-white"
+            >
+              Start Deload Week
+            </button>
+            <button
+              onClick={() => setDeloadBannerDismissed(true)}
+              className="flex-1 py-2 rounded-lg bg-[#38383a] text-xs font-semibold text-[#8e8e93]"
+            >
+              Not Now
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Deload confirm */}
+      {showDeloadConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setShowDeloadConfirm(false)}>
+          <div className="bg-[#2c2c2e] rounded-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-lg mb-2">Start Deload Week?</h3>
+            <p className="text-base text-[#8e8e93] mb-5">
+              The rest of the current cycle is skipped. After the deload week, a new cycle starts with your current training maxes.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeloadConfirm(false)} className="flex-1 py-3 rounded-lg bg-[#38383a] text-base">Cancel</button>
+              <button
+                onClick={() => { setShowDeloadConfirm(false); startDeload(DeloadType.Deload) }}
+                className="flex-1 py-3 rounded-lg bg-[var(--color-accent)] text-base font-semibold text-white"
+              >
+                Start Deload
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-[#1c1c1e] rounded-xl p-4">
         <div className="flex items-start justify-between">
@@ -577,7 +623,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                           : 'bg-[#38383a] text-white'
                     }`}
                   >
-                    {dayChipLabel(programType, d, profile.dayOrder)}
+                    {programDayChipLabel(getProgram(programType), d, profile.dayOrder)}
                     {done ? ' ✓' : ''}
                   </button>
                 )

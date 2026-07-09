@@ -4,7 +4,6 @@ import {
   dayHasTopSetMain,
   mainLiftForDay,
   topSetRepRange,
-  hypertrophyDayLabel,
   usesTopSetEngine,
   dayLabel,
   programLabel,
@@ -119,11 +118,11 @@ describe('Upper/Lower program', () => {
   })
 })
 
-describe('hypertrophyDayLabel', () => {
+describe('hypertrophy day labels', () => {
   it('returns the spec day labels for each hypertrophy day', () => {
-    expect(hypertrophyDayLabel(1)).toBe('Lower — Squat Focus')
-    expect(hypertrophyDayLabel(2)).toBe('Upper — Push Focus')
-    expect(hypertrophyDayLabel(3)).toBe('Lower — Hinge Focus')
-    expect(hypertrophyDayLabel(4)).toBe('Upper — Pull Focus')
+    expect(dayLabel(ProgramType.Hypertrophy, 1)).toBe('Lower — Squat Focus')
+    expect(dayLabel(ProgramType.Hypertrophy, 2)).toBe('Upper — Push Focus')
+    expect(dayLabel(ProgramType.Hypertrophy, 3)).toBe('Lower — Hinge Focus')
+    expect(dayLabel(ProgramType.Hypertrophy, 4)).toBe('Upper — Pull Focus')
   })
 })

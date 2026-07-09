@@ -19,8 +19,7 @@ import type {
   ProgramType,
 } from '../types'
 import { MAIN_LIFTS, ProgramType as PT, isValidDayOrder } from '../types'
-import { getProgramAccessories } from './accessories'
-import { mainLiftForDay } from './hypertrophyCalculator'
+import { getProgramAccessories, mainLiftForDay } from './programs'
 
 // ============================================================
 // Active Workout State (survives tab switches)
@@ -94,6 +93,10 @@ export interface PersistedData {
   // One-time marker persisted alongside the data: default accessories have
   // been seeded for a pre-accessory-feature profile (see normalize below).
   _migratedAccessories?: boolean
+  // One-time marker: the 4-Day Upper/Lower accessory revision (add One-Arm DB
+  // Row + Band Triceps Pushdown, drop Lower A lateral raise, Front Squat to
+  // 6-8) has been applied to stored plans (see normalize below).
+  _migratedUpperLowerPlan?: boolean
 }
 
 /** Fresh initial values for the data slice. A function (not a shared constant)
@@ -163,6 +166,83 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
   }
   if (state.customAccessories === undefined) state.customAccessories = null
   if (state.customSupplemental === undefined) state.customSupplemental = null
+
+  // One-time migration: 4-Day Upper/Lower accessory revision. Surgical — each
+  // change applies only where the stored entry still matches the old default
+  // (id AND name), so user-customized entries always win. Insertions are
+  // skipped when an exercise of the same name already exists anywhere in the
+  // list. User-edited sets/reps on retargeted entries are preserved except for
+  // the rep-range change itself.
+  {
+    const insertAfter = (
+      list: AccessoryExercise[],
+      afterName: string,
+      entry: AccessoryExercise,
+    ): AccessoryExercise[] => {
+      if (list.some((ex) => ex.name.toLowerCase() === entry.name.toLowerCase())) return list
+      const i = list.findIndex((ex) => ex.name === afterName)
+      const next = [...list]
+      next.splice(i >= 0 ? i + 1 : next.length, 0, { ...entry })
+      return next
+    }
+    const reviseUpperLower = (rec: Record<number, AccessoryExercise[]>): Record<number, AccessoryExercise[]> => {
+      const next: Record<number, AccessoryExercise[]> = {}
+      for (const k of Object.keys(rec)) next[Number(k)] = [...(rec[Number(k)] ?? [])]
+      // Upper A (Bench slot): add One-Arm DB Row after Incline DB Bench Press.
+      if (next[2]) {
+        next[2] = insertAfter(next[2], 'Incline DB Bench Press', {
+          id: 'ul-oa-row', name: 'One-Arm DB Row', weightType: 'standard',
+          sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12,
+          progressionType: 'double_progression',
+          notes: 'Per side. Brace free hand on bench, pull elbow toward hip.',
+        })
+      }
+      // Lower A (Squat slot): drop the unmodified default DB Lateral Raise.
+      if (next[1]) {
+        next[1] = next[1].filter((ex) => !(ex.id === 'ul-lat-raise-l' && ex.name === 'DB Lateral Raise'))
+      }
+      // Upper B (OHP slot): add Band Triceps Pushdown after DB Lateral Raise.
+      if (next[4]) {
+        next[4] = insertAfter(next[4], 'DB Lateral Raise', {
+          id: 'ul-band-pushdown', name: 'Band Triceps Pushdown', weightType: 'noWeight',
+          sets: 3, reps: 13, repRangeMin: 12, repRangeMax: 15,
+          progressionType: 'reps_only',
+          notes: 'Elbows pinned to sides, full lockout.',
+        })
+      }
+      // Lower B (Deadlift slot): retarget the unmodified default Front Squat to 6-8.
+      if (next[3]) {
+        next[3] = next[3].map((ex) =>
+          ex.id === 'ul-front-sq' && ex.name === 'Front Squat' && ex.repRangeMin === 10 && ex.repRangeMax === 12
+            ? { ...ex, reps: 7, repRangeMin: 6, repRangeMax: 8 }
+            : ex,
+        )
+      }
+      return next
+    }
+    if (state.profile && !state._migratedUpperLowerPlan) {
+      // The archived Upper/Lower plan is never mid-workout — always safe to revise.
+      const archived = state.programAccessoryArchive?.[PT.UpperLower]
+      if (archived) {
+        state.programAccessoryArchive = {
+          ...state.programAccessoryArchive,
+          [PT.UpperLower]: reviseUpperLower(archived),
+        }
+      }
+      // The live plan is revised only when Upper/Lower is the current program.
+      // Skip while a workout is in flight — active-workout accessory state is
+      // keyed by exercise name, so changing the list mid-session would confuse
+      // it. The flag stays unset so the revision retries on the next load.
+      if (state.profile.programType === PT.UpperLower && state.activeWorkout.isActive) {
+        // retry later
+      } else {
+        if (state.profile.programType === PT.UpperLower && state.customAccessories) {
+          state.customAccessories = reviseUpperLower(state.customAccessories)
+        }
+        state._migratedUpperLowerPlan = true
+      }
+    }
+  }
   if (!state.programAccessoryArchive || typeof state.programAccessoryArchive !== 'object') state.programAccessoryArchive = {}
   if (!state.programSupplementalArchive || typeof state.programSupplementalArchive !== 'object') state.programSupplementalArchive = {}
   if (!Array.isArray(state.savedExercises)) state.savedExercises = []
@@ -212,6 +292,16 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
     if (!state.profile.programType) updates.programType = PT.FiveThreeOne
     if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
     if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]
+    if (state.profile.lastDeloadEndedAt === undefined) {
+      // Derive from history: deload sessions log week 0. Null when none — the
+      // time-based trigger then measures from createdAt.
+      let latest: string | null = null
+      for (const s of state.sessions) {
+        if (s.week === 0 && (!latest || s.date > latest)) latest = s.date
+      }
+      updates.lastDeloadEndedAt = latest
+    }
+    if (state.profile.deloadCadenceWeeks === undefined) updates.deloadCadenceWeeks = 7
     if (!Array.isArray(state.profile.completedDaysThisWeek)) {
       // Pre-feature completion was strictly linear, so days before currentDay are done.
       const cd = state.profile.currentDay ?? 1
@@ -237,5 +327,6 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
   return {
     ...pickPersistedData(state),
     ...(state._migratedAccessories !== undefined ? { _migratedAccessories: state._migratedAccessories } : {}),
+    ...(state._migratedUpperLowerPlan !== undefined ? { _migratedUpperLowerPlan: state._migratedUpperLowerPlan } : {}),
   }
 }

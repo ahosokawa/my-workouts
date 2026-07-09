@@ -1,5 +1,5 @@
-import { MainLift, AccessoryWeightType, ProgressionType, ProgramType } from '../types'
-import type { AccessoryExercise, ProgramType as ProgramTypeT } from '../types'
+import { MainLift, AccessoryWeightType, ProgressionType } from '../types'
+import type { AccessoryExercise } from '../types'
 
 // ============================================================
 // Accessory Definitions
@@ -33,14 +33,12 @@ const SHOULDER_PRESS_ACCESSORIES: AccessoryExercise[] = [
   { id: 'row', name: 'DB Bent Over Row', sets: 3, reps: 8, weightType: AccessoryWeightType.Standard },
 ]
 
-/** Get accessories for a given main lift / day */
-export function getAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return SQUAT_ACCESSORIES
-    case MainLift.BenchPress: return BENCH_ACCESSORIES
-    case MainLift.Deadlift: return DEADLIFT_ACCESSORIES
-    case MainLift.ShoulderPress: return SHOULDER_PRESS_ACCESSORIES
-  }
+/** 5/3/1 default accessories keyed by MainLift slot. */
+export const FIVE_THREE_ONE_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: SQUAT_ACCESSORIES,
+  [MainLift.BenchPress]: BENCH_ACCESSORIES,
+  [MainLift.Deadlift]: DEADLIFT_ACCESSORIES,
+  [MainLift.ShoulderPress]: SHOULDER_PRESS_ACCESSORIES,
 }
 
 // ============================================================
@@ -146,14 +144,12 @@ const HYPERTROPHY_OHP_DAY: AccessoryExercise[] = [
     notes: 'Pull to face, elbows high. Rear delts.' },
 ]
 
-/** Hypertrophy default accessories for a given MainLift slot. */
-export function getHypertrophyAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return HYPERTROPHY_SQUAT_DAY
-    case MainLift.BenchPress: return HYPERTROPHY_BENCH_DAY
-    case MainLift.Deadlift: return HYPERTROPHY_DEADLIFT_DAY
-    case MainLift.ShoulderPress: return HYPERTROPHY_OHP_DAY
-  }
+/** Hypertrophy default accessories keyed by MainLift slot. */
+export const HYPERTROPHY_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: HYPERTROPHY_SQUAT_DAY,
+  [MainLift.BenchPress]: HYPERTROPHY_BENCH_DAY,
+  [MainLift.Deadlift]: HYPERTROPHY_DEADLIFT_DAY,
+  [MainLift.ShoulderPress]: HYPERTROPHY_OHP_DAY,
 }
 
 // ============================================================
@@ -174,6 +170,10 @@ const UPPER_LOWER_BENCH_DAY: AccessoryExercise[] = [
     sets: 3, reps: 9, repRangeMin: 8, repRangeMax: 10,
     progressionType: ProgressionType.Double,
     notes: 'Bench at 30-45°.' },
+  { id: 'ul-oa-row', name: 'One-Arm DB Row', weightType: AccessoryWeightType.Standard,
+    sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12,
+    progressionType: ProgressionType.Double,
+    notes: 'Per side. Brace free hand on bench, pull elbow toward hip.' },
   { id: 'ul-lat-raise-a', name: 'DB Lateral Raise', weightType: AccessoryWeightType.Standard,
     sets: 4, reps: 13, repRangeMin: 12, repRangeMax: 15,
     progressionType: ProgressionType.Double,
@@ -201,10 +201,6 @@ const UPPER_LOWER_SQUAT_DAY: AccessoryExercise[] = [
     sets: 4, reps: 12, repRangeMin: 10, repRangeMax: 15,
     progressionType: ProgressionType.Double,
     notes: 'Pause at top, slow eccentric. Gastroc focus.' },
-  { id: 'ul-lat-raise-l', name: 'DB Lateral Raise', weightType: AccessoryWeightType.Standard,
-    sets: 3, reps: 13, repRangeMin: 12, repRangeMax: 15,
-    progressionType: ProgressionType.Double,
-    notes: 'Slight forward lean, lead with elbows.' },
   { id: 'ul-ab-wheel', name: 'Ab Wheel Rollout', weightType: AccessoryWeightType.NoWeight,
     sets: 3, reps: 10, repRangeMin: 8, repRangeMax: 12,
     progressionType: ProgressionType.RomStages,
@@ -224,6 +220,10 @@ const UPPER_LOWER_OHP_DAY: AccessoryExercise[] = [
     sets: 4, reps: 13, repRangeMin: 12, repRangeMax: 15,
     progressionType: ProgressionType.Double,
     notes: 'Slight forward lean, lead with elbows.' },
+  { id: 'ul-band-pushdown', name: 'Band Triceps Pushdown', weightType: AccessoryWeightType.NoWeight,
+    sets: 3, reps: 13, repRangeMin: 12, repRangeMax: 15,
+    progressionType: ProgressionType.RepsOnly,
+    notes: 'Elbows pinned to sides, full lockout.' },
   { id: 'ul-hammer', name: 'DB Hammer Curl', weightType: AccessoryWeightType.Standard,
     sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12,
     progressionType: ProgressionType.Double,
@@ -236,7 +236,7 @@ const UPPER_LOWER_OHP_DAY: AccessoryExercise[] = [
 
 const UPPER_LOWER_DEADLIFT_DAY: AccessoryExercise[] = [
   { id: 'ul-front-sq', name: 'Front Squat', weightType: AccessoryWeightType.Barbell,
-    sets: 3, reps: 11, repRangeMin: 10, repRangeMax: 12,
+    sets: 3, reps: 7, repRangeMin: 6, repRangeMax: 8,
     progressionType: ProgressionType.Double,
     notes: 'Quad work without taxing the lower back further.' },
   { id: 'ul-sl-rdl', name: 'Single-Leg DB RDL', weightType: AccessoryWeightType.Standard,
@@ -253,21 +253,10 @@ const UPPER_LOWER_DEADLIFT_DAY: AccessoryExercise[] = [
     notes: 'Bend knees if straight legs are too hard. No swinging.' },
 ]
 
-/** 4-Day Upper/Lower default accessories for a given MainLift slot. */
-export function getUpperLowerAccessories(lift: MainLift): AccessoryExercise[] {
-  switch (lift) {
-    case MainLift.Squat: return UPPER_LOWER_SQUAT_DAY
-    case MainLift.BenchPress: return UPPER_LOWER_BENCH_DAY
-    case MainLift.Deadlift: return UPPER_LOWER_DEADLIFT_DAY
-    case MainLift.ShoulderPress: return UPPER_LOWER_OHP_DAY
-  }
-}
-
-/** Program-aware default accessories for a MainLift slot. */
-export function getProgramAccessories(programType: ProgramTypeT, lift: MainLift): AccessoryExercise[] {
-  switch (programType) {
-    case ProgramType.Hypertrophy: return getHypertrophyAccessories(lift)
-    case ProgramType.UpperLower: return getUpperLowerAccessories(lift)
-    default: return getAccessories(lift)
-  }
+/** 4-Day Upper/Lower default accessories keyed by MainLift slot. */
+export const UPPER_LOWER_ACCESSORIES: Record<MainLift, AccessoryExercise[]> = {
+  [MainLift.Squat]: UPPER_LOWER_SQUAT_DAY,
+  [MainLift.BenchPress]: UPPER_LOWER_BENCH_DAY,
+  [MainLift.Deadlift]: UPPER_LOWER_DEADLIFT_DAY,
+  [MainLift.ShoulderPress]: UPPER_LOWER_OHP_DAY,
 }
