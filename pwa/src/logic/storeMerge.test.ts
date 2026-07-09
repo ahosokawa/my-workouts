@@ -541,3 +541,40 @@ describe('mergePersistedState — Upper/Lower accessory revision', () => {
     expect(flag(twice)).toBe(true)
   })
 })
+
+// ============================================================
+// Deload trigger fields
+// ============================================================
+
+describe('mergePersistedState — deload trigger fields', () => {
+  it('derives lastDeloadEndedAt from the newest week-0 session', () => {
+    const persisted = {
+      profile: EXISTING_PROFILE,
+      sessions: [
+        { id: 'a', date: '2026-01-05T00:00:00.000Z', liftRawValue: 1, week: 0, cycleNumber: 1, durationSeconds: 0 },
+        { id: 'b', date: '2026-03-01T00:00:00.000Z', liftRawValue: 2, week: 0, cycleNumber: 2, durationSeconds: 0 },
+        { id: 'c', date: '2026-04-01T00:00:00.000Z', liftRawValue: 3, week: 1, cycleNumber: 3, durationSeconds: 0 },
+      ],
+    }
+    const result = mergePersistedState(persisted, currentState())
+    expect(result.profile!.lastDeloadEndedAt).toBe('2026-03-01T00:00:00.000Z')
+  })
+
+  it('lastDeloadEndedAt is null when no deload sessions exist; preserved when already set', () => {
+    const none = mergePersistedState({ profile: EXISTING_PROFILE, sessions: [] }, currentState())
+    expect(none.profile!.lastDeloadEndedAt).toBeNull()
+
+    const kept = mergePersistedState(
+      { profile: { ...EXISTING_PROFILE, lastDeloadEndedAt: '2026-05-01T00:00:00.000Z' }, sessions: [] },
+      currentState(),
+    )
+    expect(kept.profile!.lastDeloadEndedAt).toBe('2026-05-01T00:00:00.000Z')
+  })
+
+  it('deloadCadenceWeeks defaults to 7 and is preserved when set', () => {
+    const defaulted = mergePersistedState({ profile: EXISTING_PROFILE }, currentState())
+    expect(defaulted.profile!.deloadCadenceWeeks).toBe(7)
+    const kept = mergePersistedState({ profile: { ...EXISTING_PROFILE, deloadCadenceWeeks: 5 } }, currentState())
+    expect(kept.profile!.deloadCadenceWeeks).toBe(5)
+  })
+})

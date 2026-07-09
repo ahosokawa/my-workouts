@@ -4,7 +4,8 @@ import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVa
 import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
-import { PROGRAMS, mainLiftForDay, usesTopSetEngine, programLabel, programDescription, getProgramAccessories } from '../logic/programs'
+import { PROGRAMS, getProgram, mainLiftForDay, usesTopSetEngine, programLabel, programDescription, getProgramAccessories } from '../logic/programs'
+import { deloadSuggestion } from '../logic/deloadTriggers'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
@@ -493,10 +494,28 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
           <p className="text-xs text-[#8e8e93] mb-3">
             Optional deload week before starting the next cycle.
           </p>
+          {(() => {
+            const s = deloadSuggestion(profile, setLogs, getProgram(programType), new Date())
+            return s ? (
+              <p className="text-xs text-[var(--color-orange)] mb-3">{s.message}</p>
+            ) : null
+          })()}
           <div className="space-y-2">
             {([
-              { value: 'deload' as const, label: 'Deload', desc: 'Light sets at 40-60% TM (recommended)' },
-              { value: 'tm_test' as const, label: 'TM Test', desc: 'Work up to TM for 1 rep per lift' },
+              {
+                value: 'deload' as const,
+                label: 'Deload',
+                desc: selectedIsTopSetProgram
+                  ? '3×3 at 60% TM, accessories at half volume (recommended)'
+                  : 'Light sets at 40-60% TM (recommended)',
+              },
+              {
+                value: 'tm_test' as const,
+                label: 'TM Test',
+                desc: selectedIsTopSetProgram
+                  ? 'Work up to a hard top set (RPE 8-9) — TM resets to 85% of e1RM'
+                  : 'Work up to TM for 1 rep per lift',
+              },
               { value: 'skip' as const, label: 'Skip', desc: 'Go straight to next cycle' },
             ]).map((opt) => (
               <button

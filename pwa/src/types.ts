@@ -213,6 +213,12 @@ export interface UserProfile {
   // Current top-set weight (stored in lbs) per main lift for hypertrophy program.
   // Drives next-session prescription; updated after each session via progression algo.
   hypertrophyTopSets?: Partial<Record<MainLift, number>>
+  // ISO date the last deload/TM-test week finished. Migrated from the newest
+  // week-0 session when absent; null = never deloaded (time-based deload
+  // suggestions then measure from createdAt).
+  lastDeloadEndedAt?: string | null
+  // Weeks between deload suggestions (time-based trigger). Default 7.
+  deloadCadenceWeeks?: number
 }
 
 /** The stored training max (lbs) for a main lift. Single source for the

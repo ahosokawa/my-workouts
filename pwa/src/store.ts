@@ -289,6 +289,9 @@ export const useStore = create<AppState>()(
             deloadDay: 1,
             isCycleComplete: false,
           },
+          // A deload can now start mid-cycle (trigger banner) — a workout in
+          // progress belongs to the abandoned cycle position, so discard it.
+          activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
         })
       },
 
@@ -297,8 +300,10 @@ export const useStore = create<AppState>()(
         if (!profile || !profile.isDeloading) return
         const nextDay = profile.deloadDay + 1
         if (nextDay > 4) {
-          // Deload complete — start next cycle automatically
-          // The variant was already saved to profile before deload started
+          // Deload complete — stamp it (feeds the time-based deload trigger),
+          // then start the next cycle automatically. The variant was already
+          // saved to the profile before the deload started.
+          set({ profile: { ...profile, lastDeloadEndedAt: new Date().toISOString() } })
           get().startNewCycle(profile.currentVariant)
         } else {
           set({

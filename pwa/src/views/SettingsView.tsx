@@ -4,6 +4,7 @@ import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycl
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { PROGRAMS, usesTopSetEngine, dayLabel, programLabel } from '../logic/programs'
+import { DEFAULT_DELOAD_CADENCE_WEEKS } from '../logic/deloadTriggers'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
@@ -273,6 +274,34 @@ export default function SettingsView() {
         <Row label="Cycle" value={String(profile.cycleNumber)} />
         <Row label="Week" value={`${profile.currentWeek} of ${profile.cycleWeeks ?? 3}`} />
         <Row label="Day" value={`${profile.currentDay} – ${liftDay(profile.currentDay)}`} />
+      </Section>
+
+      {/* Deload */}
+      <Section title="Deload">
+        <Row
+          label="Last deload"
+          value={profile.lastDeloadEndedAt ? formatRelative(profile.lastDeloadEndedAt) : 'Never'}
+        />
+        <div className="flex items-center justify-between py-2">
+          <span className="text-sm">Suggest a deload every</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => updateProfile({ deloadCadenceWeeks: Math.max(3, (profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS) - 1) })}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+            >
+              −
+            </button>
+            <span className="text-sm tabular-nums w-16 text-center">
+              {profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS} wks
+            </span>
+            <button
+              onClick={() => updateProfile({ deloadCadenceWeeks: Math.min(12, (profile.deloadCadenceWeeks ?? DEFAULT_DELOAD_CADENCE_WEEKS) + 1) })}
+              className="w-8 h-8 rounded-lg bg-[#38383a] text-base font-semibold"
+            >
+              +
+            </button>
+          </div>
+        </div>
       </Section>
 
       {/* Body Weight & Sex */}

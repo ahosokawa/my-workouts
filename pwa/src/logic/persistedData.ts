@@ -292,6 +292,16 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
     if (!state.profile.programType) updates.programType = PT.FiveThreeOne
     if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
     if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]
+    if (state.profile.lastDeloadEndedAt === undefined) {
+      // Derive from history: deload sessions log week 0. Null when none — the
+      // time-based trigger then measures from createdAt.
+      let latest: string | null = null
+      for (const s of state.sessions) {
+        if (s.week === 0 && (!latest || s.date > latest)) latest = s.date
+      }
+      updates.lastDeloadEndedAt = latest
+    }
+    if (state.profile.deloadCadenceWeeks === undefined) updates.deloadCadenceWeeks = 7
     if (!Array.isArray(state.profile.completedDaysThisWeek)) {
       // Pre-feature completion was strictly linear, so days before currentDay are done.
       const cd = state.profile.currentDay ?? 1
