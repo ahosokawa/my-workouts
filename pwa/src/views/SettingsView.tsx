@@ -10,6 +10,8 @@ import { requestNotificationPermission } from '../notifications'
 import { verifyToken, errorMessage } from '../logic/gistSync'
 import { syncOnce } from '../logic/syncManager'
 import { downloadJSON, backupFilename } from '../logic/download'
+import { getStorageHealth, formatBytes } from '../logic/storageHealth'
+import type { StorageHealth } from '../logic/storageHealth'
 
 export default function SettingsView() {
   const profile = useStore((s) => s.profile)
@@ -44,7 +46,18 @@ export default function SettingsView() {
   const [syncingNow, setSyncingNow] = useState(false)
   const [showDisableSync, setShowDisableSync] = useState(false)
   const [pendingProgram, setPendingProgram] = useState<ProgramTypeT | null>(null)
+  const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void getStorageHealth().then((health) => {
+      if (!cancelled) setStorageHealth(health)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (profile?.bodyWeightLbs) {
@@ -500,6 +513,26 @@ export default function SettingsView() {
         )}
         {importStatus === 'error' && (
           <div className="py-2 text-sm text-[var(--color-red)]">Import failed. Invalid backup file.</div>
+        )}
+        {storageHealth && (
+          <div className="py-2 text-xs text-[#8e8e93] space-y-1">
+            {storageHealth.appBytes !== null && (
+              <div>
+                App data: {formatBytes(storageHealth.appBytes)}
+                {storageHealth.quota !== null && storageHealth.usage !== null && (
+                  <> · {formatBytes(storageHealth.usage)} of {formatBytes(storageHealth.quota)} origin quota used</>
+                )}
+              </div>
+            )}
+            <div>
+              Persistent storage:{' '}
+              {storageHealth.persisted === null
+                ? 'Unsupported'
+                : storageHealth.persisted
+                  ? 'On'
+                  : 'Not granted'}
+            </div>
+          </div>
         )}
       </Section>
 
