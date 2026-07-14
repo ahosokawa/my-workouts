@@ -6,7 +6,7 @@ import {
   lastAccessorySession,
   lastMainLiftTopSet,
 } from './progression'
-import { MainLift } from '../types'
+import { MainLift, isTopSetLog } from '../types'
 import type { SetLog } from '../types'
 
 // ============================================================
@@ -117,6 +117,38 @@ describe('nextDoubleProgression', () => {
     expect(out.weightLbs).toBe(45)
     expect(out.targetReps).toBe(10)
   })
+
+  it('clamps a drop to the floor and says to drop the added weight', () => {
+    const out = nextDoubleProgression({
+      ...base,
+      lastSession: { weightLbs: 182, repsPerSet: [7, 6, 6] },
+      minWeightLbs: 180,
+    })
+    expect(out.reason).toBe('drop_weight')
+    expect(out.weightLbs).toBe(180)
+    expect(out.message).toContain('drop the added weight')
+  })
+
+  it('holds at the floor instead of dropping when already at bodyweight', () => {
+    const out = nextDoubleProgression({
+      ...base,
+      lastSession: { weightLbs: 180, repsPerSet: [7, 6, 6] },
+      minWeightLbs: 180,
+    })
+    expect(out.reason).toBe('hold')
+    expect(out.weightLbs).toBe(180)
+    expect(out.targetReps).toBe(8)
+  })
+
+  it('behaves exactly as before when no floor is given', () => {
+    const out = nextDoubleProgression({
+      ...base,
+      lastSession: { weightLbs: 50, repsPerSet: [8, 7, 7] },
+    })
+    expect(out.reason).toBe('drop_weight')
+    expect(out.weightLbs).toBe(45)
+    expect(out.message).toContain('drop to 45 lbs')
+  })
 })
 
 // ============================================================
@@ -158,6 +190,30 @@ describe('nextRepsThenLoad', () => {
     })
     expect(out.reason).toBe('add_reps')
     expect(out.weightLbs).toBe(200)
+  })
+
+  it('never suggests dropping below bodyweight after a below-range session', () => {
+    const out = nextRepsThenLoad({
+      lastSession: { weightLbs: 180, repsPerSet: [5, 4, 4] },
+      bodyWeightLbs: 180,
+      repRangeMin: 6,
+      repRangeMax: 8,
+      incrementLbs: 5,
+    })
+    expect(out.weightLbs).toBeGreaterThanOrEqual(180)
+    expect(out.reason).toBe('hold')
+  })
+
+  it('drops only the added weight after a below-range session with load', () => {
+    const out = nextRepsThenLoad({
+      lastSession: { weightLbs: 183, repsPerSet: [5, 4, 4] },
+      bodyWeightLbs: 180,
+      repRangeMin: 6,
+      repRangeMax: 8,
+      incrementLbs: 5,
+    })
+    expect(out.reason).toBe('drop_weight')
+    expect(out.weightLbs).toBe(180)
   })
 })
 
@@ -226,5 +282,21 @@ describe('history helpers', () => {
     const out = lastMainLiftTopSet(setLogs, MainLift.Squat)
     expect(out).not.toBeNull()
     expect(out!.weight).toBe(185)
+  })
+
+  it('isTopSetLog is false for a genuine 5/3/1 AMRAP log (no rir key, no rep range)', () => {
+    expect(isTopSetLog(log({ isMainLift: true, isAMRAP: true }))).toBe(false)
+  })
+
+  it('isTopSetLog is true for a new log carrying the prescribed rep range', () => {
+    expect(isTopSetLog(log({ isMainLift: true, isAMRAP: true, repRangeMin: 5, repRangeMax: 6 }))).toBe(true)
+  })
+
+  it('isTopSetLog is true for a legacy completed top set whose rir key is null', () => {
+    expect(isTopSetLog(log({ isMainLift: true, isAMRAP: true, rir: null }))).toBe(true)
+  })
+
+  it('isTopSetLog is false for non-AMRAP logs even with a rep range', () => {
+    expect(isTopSetLog(log({ isAMRAP: false, repRangeMin: 8, repRangeMax: 10 }))).toBe(false)
   })
 })

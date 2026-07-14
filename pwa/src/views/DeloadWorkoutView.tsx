@@ -127,6 +127,8 @@ function DeloadWorkoutViewInner({ profile }: { profile: UserProfile }) {
           isCompleted: completedSets.has(i),
           completedAt: completedSets.has(i) ? new Date().toISOString() : null,
           ...(isRetestTop && completedSets.has(i) ? { rir: retestRir } : {}),
+          // Persist the prescribed rep-range so history can tell top sets from true AMRAPs.
+          ...(s.repRangeMin !== undefined ? { repRangeMin: s.repRangeMin, repRangeMax: s.repRangeMax } : {}),
         }
       })
 

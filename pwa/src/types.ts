@@ -256,6 +256,17 @@ export interface SetLog {
   completedAt: string | null  // ISO date
   /** Reps-in-reserve self-report. 0/1/2/3 where 3 means "3 or more". Hypertrophy top sets only. */
   rir?: number | null
+  /** Prescribed rep-range for top sets (copied from PrescribedSet at save). Absent on 5/3/1 AMRAP and older logs. */
+  repRangeMin?: number
+  repRangeMax?: number
+}
+
+/** True when an isAMRAP log is a rep-range top set (hypertrophy/UL/TM-retest), not a true
+ *  5/3/1 AMRAP. New logs carry repRangeMin; older completed top sets are identified by the
+ *  presence of the `rir` key, which the top-set save paths attach (even when its value is
+ *  null) and the 5/3/1 save path never does. */
+export function isTopSetLog(log: SetLog): boolean {
+  return log.isAMRAP && (log.repRangeMin != null || log.rir !== undefined)
 }
 
 export interface WilksEntry {

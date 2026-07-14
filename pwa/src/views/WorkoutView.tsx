@@ -67,6 +67,9 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const accessoriesSlot = lift ?? 4
 
   const units = profile.units ?? 'lbs'
+  // Bodyweight accessories pin their main weight to the profile bodyweight; null when unset.
+  const bwLbs = profile.bodyWeightLbs && profile.bodyWeightLbs > 0 ? profile.bodyWeightLbs : null
+  const bwDisplay = bwLbs != null ? displayRound(bwLbs, units) : null
   const liveTm = lift ? useStore.getState().getTrainingMax(lift) : 0
   const tm = aw.isActive ? (aw.tmLbs ?? liveTm) : liveTm
   const currentVariant = profile.currentVariant ?? 'fsl'
@@ -159,17 +162,20 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const defaultWeight = useCallback(
     (ex: AccessoryExercise): string => {
+      const isBW = ex.weightType === AccessoryWeightType.Bodyweight
       // Hypertrophy: prefer the progression algorithm's suggestion when it exists.
       if (isTopSetProgram) {
         const s = accessorySuggestion(ex)
-        if (s && s.weight > 0) return String(s.weight)
+        // Clamp bodyweight exercises to at least bodyweight — a stale total from
+        // before a bodyweight change could otherwise seed below BW.
+        if (s && s.weight > 0) return String(isBW && bwDisplay != null ? Math.max(s.weight, bwDisplay) : s.weight)
       }
       const last = setLogs
         .filter((l) => l.exerciseName === ex.name && !l.isMainLift && l.isCompleted && l.weight > 0)
         .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))[0]
 
-      if (ex.weightType === AccessoryWeightType.Bodyweight) {
-        if (profile?.bodyWeightLbs && profile.bodyWeightLbs > 0) return String(displayRound(profile.bodyWeightLbs, units))
+      if (isBW) {
+        if (bwDisplay != null) return String(bwDisplay)
         if (last) return String(displayRound(last.weight, units))
       }
       if ((ex.weightType === AccessoryWeightType.Standard || ex.weightType === AccessoryWeightType.Barbell) && last) {
@@ -247,6 +253,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       repRangeMin: range.min,
       repRangeMax: range.max,
       incrementLbs: 5,
+      minWeightLbs: ex.weightType === AccessoryWeightType.Bodyweight ? (profile?.bodyWeightLbs ?? 0) : 0,
     })
     return { weight: displayRound(s.weightLbs, units), reps: s.targetReps, message: s.message }
   }
@@ -268,13 +275,19 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     if (restNotifyEnabled) requestNotificationPermission()
     const w: Record<string, string> = {}
     const r: Record<string, string> = {}
+    const a: Record<string, string> = {}
     for (const ex of accessories) {
       const dw = defaultWeight(ex)
       const dr = defaultReps(ex)
+      const isBW = ex.weightType === AccessoryWeightType.Bodyweight
+      const added = isBW && bwDisplay != null
+        ? Math.max(0, Math.round(((Number(dw) || bwDisplay) - bwDisplay) * 2) / 2)
+        : 0
       for (let i = 0; i < ex.sets; i++) {
         const key = `${ex.name}-${i}`
         if (ex.weightType !== AccessoryWeightType.NoWeight) w[key] = dw
         r[key] = dr
+        if (isBW && bwDisplay != null && added > 0) a[key] = String(added)
       }
     }
     setCollapsedSections(new Set())
@@ -296,6 +309,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       completedAccessory: [],
       accWeights: w,
       accReps: r,
+      accAdded: a,
       mainWeights: {},
       mainReps: {},
       lastSetTime: null,
@@ -362,6 +376,38 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     updateAW({ accWeights: next })
   }
 
+  /** Bodyweight accessories: the user edits added weight; accWeights keeps holding
+   *  the total (BW + added) so the save path and history stay unchanged. */
+  function updateAccAdded(exercise: AccessoryExercise, setIndex: number, value: string) {
+    if (bwDisplay == null) return
+    const total = String(bwDisplay + (Number(value) || 0))
+    const nextAdded = { ...(aw.accAdded ?? {}) }
+    const nextW = { ...aw.accWeights }
+    const key = `${exercise.name}-${setIndex}`
+    nextAdded[key] = value
+    nextW[key] = total
+    for (let i = 0; i < exercise.sets; i++) {
+      const k = `${exercise.name}-${i}`
+      if (k !== key && !completedAccessory.has(k)) {
+        nextAdded[k] = value
+        nextW[k] = total
+      }
+    }
+    updateAW({ accAdded: nextAdded, accWeights: nextW })
+  }
+
+  /** Display value for the added-weight input. Prefers the raw text the user typed;
+   *  otherwise derives it from the stored total (covers in-flight workouts persisted
+   *  before accAdded existed). */
+  function addedValue(key: string): string {
+    if (bwDisplay == null) return ''
+    const raw = (aw.accAdded ?? {})[key]
+    if (raw !== undefined) return raw
+    const total = Number(aw.accWeights[key] || '') || bwDisplay
+    const added = Math.max(0, Math.round((total - bwDisplay) * 2) / 2)
+    return added > 0 ? String(added) : ''
+  }
+
   function updateAccRep(exercise: AccessoryExercise, setIndex: number, value: string) {
     const next = { ...aw.accReps }
     const key = `${exercise.name}-${setIndex}`
@@ -415,6 +461,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         completedAt: completed ? new Date().toISOString() : null,
         // Persist RIR on the hypertrophy top-set only (the lone AMRAP entry).
         ...(s.isAMRAP && isTopSetProgram && completed ? { rir: topSetRir } : {}),
+        // Persist the prescribed rep-range so history can tell top sets from true AMRAPs.
+        ...(s.repRangeMin !== undefined ? { repRangeMin: s.repRangeMin, repRangeMax: s.repRangeMax } : {}),
       })
       if (s.isAMRAP && completed) {
         curAmrapWeight = weightLbs
@@ -697,6 +745,11 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             {ex.notes && (
               <div className="text-xs text-[#8e8e93] -mt-1 mb-2">{ex.notes}</div>
             )}
+            {ex.weightType === AccessoryWeightType.Bodyweight && bwDisplay == null && (
+              <div className="text-xs text-[#8e8e93] -mt-1 mb-2">
+                Set your bodyweight in Settings to lock this to BW + added weight.
+              </div>
+            )}
             {suggestion && (
               <div className="text-xs text-[var(--color-accent)] mb-2">{suggestion.message}</div>
             )}
@@ -725,15 +778,31 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                     {/* Weight */}
                     {ex.weightType !== AccessoryWeightType.NoWeight && (
                       aw.isActive && !completed ? (
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          placeholder={units}
-                          value={aw.accWeights[key] ?? ''}
-                          onChange={(e) => { e.stopPropagation(); updateAccWeight(ex, si, e.target.value) }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-16 text-right text-base py-1 px-2"
-                        />
+                        ex.weightType === AccessoryWeightType.Bodyweight && bwDisplay != null ? (
+                          // Locked to bodyweight; only added weight (belt, vest) is editable.
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-sm text-[#8e8e93] whitespace-nowrap">BW {bwDisplay} +</span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={addedValue(key)}
+                              onChange={(e) => { e.stopPropagation(); updateAccAdded(ex, si, e.target.value) }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-14 text-right text-base py-1 px-2"
+                            />
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            placeholder={units}
+                            value={aw.accWeights[key] ?? ''}
+                            onChange={(e) => { e.stopPropagation(); updateAccWeight(ex, si, e.target.value) }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-16 text-right text-base py-1 px-2"
+                          />
+                        )
                       ) : (
                         accWeight > 0 ? <span className="text-base text-[#8e8e93]">{units === 'kg' ? Math.round(accWeight) : Math.round(accWeight * 2) / 2} {units}</span> : null
                       )

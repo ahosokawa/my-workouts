@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
-import { liftDisplayName, liftFromDay, displayRound } from '../types'
+import { liftDisplayName, liftFromDay, displayRound, isTopSetLog } from '../types'
 import { barbellWeight } from '../logic/plates'
 import { getVariantConfig } from '../logic/variants'
 import PlateBreakdown from '../components/PlateBreakdown'
@@ -80,7 +80,9 @@ export default function WorkoutDetailView() {
                 </div>
                 <span className={`text-sm ${log.isAMRAP && log.isCompleted ? 'font-bold text-[var(--color-green)]' : 'text-[#8e8e93]'}`}>
                   {log.isAMRAP && log.actualReps != null ? `${log.actualReps} reps` : `${log.targetReps} reps`}
-                  {log.isAMRAP && ' (AMRAP)'}
+                  {log.isAMRAP && (isTopSetLog(log)
+                    ? ` (Top set${log.rir != null ? ` · RIR ${log.rir === 3 ? '3+' : log.rir}` : ''})`
+                    : ' (AMRAP)')}
                 </span>
               </div>
             )

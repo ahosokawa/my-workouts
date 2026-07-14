@@ -47,6 +47,8 @@ export interface ActiveWorkout {
   amrapReps: number
   accWeights: Record<string, string>
   accReps: Record<string, string>
+  // Raw "added weight" text for Bodyweight accessories (UI only; accWeights holds the total)
+  accAdded: Record<string, string>
   mainWeights: Record<number, string>  // per-set weight overrides, keyed by set index
   mainReps: Record<number, string>     // per-set rep overrides, keyed by set index
   lastSetTime: number | null
@@ -66,6 +68,7 @@ export const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {
   amrapReps: 0,
   accWeights: {},
   accReps: {},
+  accAdded: {},
   mainWeights: {},
   mainReps: {},
   lastSetTime: null,

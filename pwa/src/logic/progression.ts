@@ -184,8 +184,10 @@ export function nextDoubleProgression(input: {
   repRangeMin: number
   repRangeMax: number
   incrementLbs: number
+  /** Floor below which weight never drops (bodyweight for BW exercises). Default 0. */
+  minWeightLbs?: number
 }): AccessorySuggestion {
-  const { lastSession, repRangeMin, repRangeMax, incrementLbs } = input
+  const { lastSession, repRangeMin, repRangeMax, incrementLbs, minWeightLbs = 0 } = input
 
   if (!lastSession || lastSession.repsPerSet.length === 0) {
     return {
@@ -210,12 +212,23 @@ export function nextDoubleProgression(input: {
     }
   }
   if (anyBelowMin) {
-    const next = Math.max(0, weightLbs - incrementLbs)
+    const next = Math.max(minWeightLbs, weightLbs - incrementLbs)
+    if (minWeightLbs > 0 && next >= weightLbs) {
+      // Already at (or below) bodyweight — there's no load to drop; rebuild reps instead.
+      return {
+        weightLbs: next,
+        targetReps: repRangeMin,
+        reason: 'hold',
+        message: `Below range at bodyweight — stay there and rebuild from ${repRangeMin} reps.`,
+      }
+    }
     return {
       weightLbs: next,
       targetReps: repRangeMin,
       reason: 'drop_weight',
-      message: `Below range last session — drop to ${next} lbs and rebuild.`,
+      message: minWeightLbs > 0 && next === minWeightLbs
+        ? 'Below range last session — drop the added weight and rebuild at bodyweight.'
+        : `Below range last session — drop to ${next} lbs and rebuild.`,
     }
   }
   const weakest = Math.min(...repsPerSet)
@@ -274,6 +287,7 @@ export function nextRepsThenLoad(input: {
     repRangeMin,
     repRangeMax,
     incrementLbs,
+    minWeightLbs: bodyWeightLbs,
   })
 }
 

@@ -225,11 +225,13 @@ function AccessoryRow({
   const repsLabel = accessoryRepsLabel(ex)
   const last = lastAccessorySession(setLogs, ex.name)
   const weightLbs = (() => {
-    if (last && last.weightLbs > 0) return last.weightLbs
-    if (ex.weightType === AccessoryWeightType.Bodyweight && bodyWeightLbs && bodyWeightLbs > 0) {
-      return bodyWeightLbs
-    }
-    return 0
+    const bw = ex.weightType === AccessoryWeightType.Bodyweight && bodyWeightLbs && bodyWeightLbs > 0
+      ? bodyWeightLbs
+      : 0
+    // Bodyweight exercises never preview below current bodyweight, even if the
+    // last logged total predates a bodyweight change.
+    if (last && last.weightLbs > 0) return Math.max(last.weightLbs, bw)
+    return bw
   })()
   const weightLabel =
     ex.weightType === AccessoryWeightType.NoWeight
