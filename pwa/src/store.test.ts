@@ -70,7 +70,7 @@ describe('destructive actions discard an in-progress workout', () => {
   })
 
   it('importData clears activeWorkout and never touches cloudSync', () => {
-    const sync = { enabled: true, token: 'ghp_device_secret', gistId: 'g1', lastSyncAt: null, lastError: null }
+    const sync = { enabled: true, bridgeUrl: 'https://script.google.com/macros/s/X/exec', secret: 'ghp_device_secret', lastSyncAt: null, lastError: null }
     useStore.setState({ cloudSync: sync })
     const backup = useStore.getState().exportData()
 
@@ -91,7 +91,7 @@ describe('resetAll', () => {
       restNotifyEnabled: false,
       restNotifyMinutes: 7,
       savedExercises: [{ id: 'x', name: 'Row', weightType: 'standard' as never }],
-      cloudSync: { enabled: true, token: 't', gistId: null, lastSyncAt: null, lastError: null },
+      cloudSync: { enabled: true, bridgeUrl: 'https://script.google.com/macros/s/X/exec', secret: 't', lastSyncAt: null, lastError: null },
     })
 
     useStore.getState().resetAll()

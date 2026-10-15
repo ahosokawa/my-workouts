@@ -7,11 +7,45 @@ import { PROGRAMS, usesTopSetEngine, dayLabel, programLabel } from '../logic/pro
 import { DEFAULT_DELOAD_CADENCE_WEEKS } from '../logic/deloadTriggers'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
-import { verifyToken, errorMessage } from '../logic/gistSync'
-import { syncOnce } from '../logic/syncManager'
+import { pushFiles, errorMessage } from '../logic/driveSync'
+import { syncOnce, buildSyncFiles } from '../logic/syncManager'
+import { bridgeScript, generateSecret, isBridgeUrl } from '../logic/bridgeScript'
+import { ANALYSIS_FILENAME, DRIVE_FOLDER, SET_LOG_FILENAME } from '../logic/driveFiles'
 import { downloadJSON, backupFilename } from '../logic/download'
 import { getStorageHealth, formatBytes } from '../logic/storageHealth'
 import type { StorageHealth } from '../logic/storageHealth'
+
+// The setup secret must survive the trip to script.google.com and back (iOS
+// may evict a backgrounded PWA), so it waits in localStorage until connected.
+const PENDING_SECRET_KEY = 'my-workouts:pending-bridge-secret'
+
+function loadPendingSecret(): string | null {
+  try {
+    return localStorage.getItem(PENDING_SECRET_KEY)
+  } catch {
+    return null
+  }
+}
+
+function savePendingSecret(secret: string | null): void {
+  try {
+    if (secret) localStorage.setItem(PENDING_SECRET_KEY, secret)
+    else localStorage.removeItem(PENDING_SECRET_KEY)
+  } catch {
+    // ignore: the secret still lives in component state for this session
+  }
+}
+
+const CLAUDE_INSTRUCTIONS = `My workout tracking data syncs automatically to my Google Drive, folder "${DRIVE_FOLDER}". Read ${ANALYSIS_FILENAME} there first (program, training maxes, weekly summary, exercise progression, sessions). Use ${SET_LOG_FILENAME} for set-level questions. Always re-read the files at the start of an analysis; they update after every change.`
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export default function SettingsView() {
   const profile = useStore((s) => s.profile)
@@ -40,8 +74,11 @@ export default function SettingsView() {
   const [importJson, setImportJson] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [showCloudSetup, setShowCloudSetup] = useState(false)
-  const [tokenInput, setTokenInput] = useState('')
-  const [verifying, setVerifying] = useState(false)
+  const [pendingSecret, setPendingSecret] = useState<string | null>(null)
+  const [copied, setCopied] = useState<null | 'script' | 'claude'>(null)
+  const [scriptFallback, setScriptFallback] = useState<string | null>(null)
+  const [urlInput, setUrlInput] = useState('')
+  const [connecting, setConnecting] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [syncingNow, setSyncingNow] = useState(false)
   const [showDisableSync, setShowDisableSync] = useState(false)
@@ -170,31 +207,56 @@ export default function SettingsView() {
     downloadJSON(json, filename)
   }
 
-  async function handleEnableSync() {
-    const token = tokenInput.trim()
-    if (!token) {
-      setSetupError('Paste a GitHub token.')
+  async function handleCopyScript() {
+    const secret = pendingSecret ?? loadPendingSecret() ?? generateSecret()
+    setPendingSecret(secret)
+    savePendingSecret(secret)
+    const script = bridgeScript(secret)
+    if (await copyText(script)) {
+      setScriptFallback(null)
+      setCopied('script')
+    } else {
+      setScriptFallback(script)
+    }
+  }
+
+  async function handleCopyClaude() {
+    if (await copyText(CLAUDE_INSTRUCTIONS)) setCopied('claude')
+  }
+
+  async function handleConnect() {
+    const url = urlInput.trim()
+    const secret = pendingSecret ?? loadPendingSecret()
+    if (!secret) {
+      setSetupError('Copy the setup script first (step 1), deploy it, then paste the URL.')
       return
     }
-    setVerifying(true)
+    if (!isBridgeUrl(url)) {
+      setSetupError("That doesn't look like a web app URL. It should end in /exec.")
+      return
+    }
+    setConnecting(true)
     setSetupError(null)
-    const result = await verifyToken(token)
-    setVerifying(false)
+    // The first write doubles as the connection test.
+    const now = new Date().toISOString()
+    const result = await pushFiles(url, secret, buildSyncFiles(useStore.getState()))
+    setConnecting(false)
     if (!result.ok) {
       setSetupError(errorMessage(result.error))
       return
     }
     setCloudSync({
       enabled: true,
-      token,
-      gistId: null,
-      lastSyncAt: null,
+      bridgeUrl: url,
+      secret,
+      lastSyncAt: now,
       lastError: null,
     })
-    setTokenInput('')
+    savePendingSecret(null)
+    setPendingSecret(null)
+    setUrlInput('')
+    setCopied(null)
     setShowCloudSetup(false)
-    // Kick off the first sync immediately rather than waiting for the debounce.
-    void syncOnce(useStore)
   }
 
   async function handleSyncNow() {
@@ -536,62 +598,91 @@ export default function SettingsView() {
         )}
       </Section>
 
-      {/* Cloud Backup (GitHub Gist) */}
-      <Section title="Cloud Backup (GitHub Gist)">
+      {/* Cloud Sync (Google Drive) */}
+      <Section title="Google Drive Sync">
         {!cloudSync?.enabled && !showCloudSetup && (
           <>
             <button
               onClick={() => { setShowCloudSetup(true); setSetupError(null) }}
               className="w-full text-left py-2 text-sm text-[var(--color-accent)]"
             >
-              Enable GitHub Gist Sync
+              Set Up Google Drive Sync
             </button>
             <div className="py-2 text-xs text-[#8e8e93]">
-              Auto-saves a private backup to your GitHub account whenever your data changes.
+              Auto-saves your data to a “{DRIVE_FOLDER}” folder in your Google Drive whenever it changes, in a format Claude can read for analysis.
             </div>
           </>
         )}
 
         {!cloudSync?.enabled && showCloudSetup && (
-          <div className="py-2 space-y-3">
-            <div className="text-xs text-[#8e8e93]">
-              Create a <span className="text-white">classic</span> token with <span className="text-white">gist</span> scope only:{' '}
-              <a
-                href="https://github.com/settings/tokens/new?scopes=gist&description=my-workouts%20backup"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[var(--color-accent)] underline"
+          <div className="py-2 space-y-4">
+            <div className="space-y-2">
+              <div className="text-sm">1. Copy the setup script</div>
+              <button
+                onClick={handleCopyScript}
+                className="w-full py-2 rounded-lg bg-[#38383a] text-sm"
               >
-                github.com/settings/tokens/new
-              </a>
-              . Paste it below.
+                {copied === 'script' ? 'Copied ✓' : 'Copy Setup Script'}
+              </button>
+              {scriptFallback && (
+                <>
+                  <div className="text-xs text-[#8e8e93]">Couldn&apos;t copy automatically. Select all and copy:</div>
+                  <textarea
+                    readOnly
+                    value={scriptFallback}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="w-full h-32 text-xs font-mono"
+                  />
+                </>
+              )}
             </div>
-            <input
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="ghp_…"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="w-full text-sm"
-            />
+            <div className="space-y-2">
+              <div className="text-sm">2. Deploy it</div>
+              <div className="text-xs text-[#8e8e93]">
+                Open{' '}
+                <a
+                  href="https://script.google.com/home/projects/create"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--color-accent)] underline"
+                >
+                  a new Apps Script project
+                </a>
+                , replace the editor contents with the script, and save. Then Deploy → New deployment → Web app, set Execute as <span className="text-white">Me</span> and Who has access <span className="text-white">Anyone</span>, authorize, and copy the web app URL.
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-sm">3. Paste the web app URL</div>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="https://script.google.com/macros/s/…/exec"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                disabled={connecting}
+                className="w-full text-sm"
+              />
+            </div>
             {setupError && (
               <div className="text-xs text-[var(--color-red)]">{setupError}</div>
             )}
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowCloudSetup(false); setTokenInput(''); setSetupError(null) }}
-                disabled={verifying}
+                onClick={() => { setShowCloudSetup(false); setUrlInput(''); setSetupError(null) }}
+                disabled={connecting}
                 className="flex-1 py-2 rounded-lg bg-[#38383a] text-sm disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleEnableSync}
-                disabled={verifying || !tokenInput.trim()}
+                onClick={handleConnect}
+                disabled={connecting || !urlInput.trim()}
                 className="flex-1 py-2 rounded-lg bg-[var(--color-accent)] text-sm font-semibold text-white disabled:opacity-50"
               >
-                {verifying ? 'Verifying…' : 'Verify & Enable'}
+                {connecting ? 'Connecting…' : 'Connect'}
               </button>
             </div>
           </div>
@@ -618,6 +709,12 @@ export default function SettingsView() {
               className="w-full text-left py-2 text-sm text-[var(--color-accent)] disabled:opacity-50"
             >
               {syncingNow ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button
+              onClick={handleCopyClaude}
+              className="w-full text-left py-2 text-sm text-[var(--color-accent)]"
+            >
+              {copied === 'claude' ? 'Copied ✓' : 'Copy instructions for Claude'}
             </button>
             <button
               onClick={() => setShowDisableSync(true)}
@@ -688,8 +785,8 @@ export default function SettingsView() {
       )}
       {showDisableSync && (
         <Alert
-          title="Disable Cloud Sync?"
-          message="The existing gist on GitHub won't be deleted, but your token will be removed from this device and auto-sync will stop."
+          title="Disable Drive Sync?"
+          message="The files already in your Google Drive won't be deleted, but this device will forget the connection and auto-sync will stop."
           onConfirm={handleDisableSync}
           onCancel={() => setShowDisableSync(false)}
           confirmLabel="Disable"

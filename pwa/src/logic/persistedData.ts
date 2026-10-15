@@ -278,6 +278,11 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
   if (state.restNotifyEnabled === undefined) state.restNotifyEnabled = true
   if (state.restNotifyMinutes === undefined) state.restNotifyMinutes = 3
   if (state.cloudSync === undefined) state.cloudSync = null
+  // Gist-era sync configs ({token, gistId}) can't talk to the Drive bridge —
+  // drop them so Settings offers the new setup instead of a broken "enabled".
+  if (state.cloudSync && typeof (state.cloudSync as Partial<CloudSyncConfig>).bridgeUrl !== 'string') {
+    state.cloudSync = null
+  }
   if (state.profile === undefined) state.profile = null
 
   // Ensure new profile fields have defaults (variant support)

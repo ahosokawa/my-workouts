@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { syncOnce, type SyncableStore } from './syncManager'
+import { ANALYSIS_FILENAME, BACKUP_FILENAME, SET_LOG_FILENAME } from './driveFiles'
+
+const URL = 'https://script.google.com/macros/s/abc/exec'
 
 type State = ReturnType<SyncableStore['getState']>
 
@@ -28,7 +31,7 @@ function makeStore(overrides: Partial<State> = {}): {
 
   const stateRef: { current: State } = {
     current: {
-      profile: { foo: 1 },
+      profile: null,
       sessions: [],
       setLogs: [],
       wilksEntries: [],
@@ -36,8 +39,8 @@ function makeStore(overrides: Partial<State> = {}): {
       savedExercises: [],
       cloudSync: {
         enabled: true,
-        token: 'tok',
-        gistId: null,
+        bridgeUrl: URL,
+        secret: 'sec',
         lastSyncAt: null,
         lastError: null,
       },
@@ -76,51 +79,66 @@ describe('syncOnce', () => {
 
   it('is a no-op when disabled', async () => {
     const { store, setCloudSyncStatus } = makeStore({
-      cloudSync: { enabled: false, token: 'tok', gistId: null, lastSyncAt: null, lastError: null },
+      cloudSync: { enabled: false, bridgeUrl: URL, secret: 'sec', lastSyncAt: null, lastError: null },
     } as Partial<State>)
     await syncOnce(store)
     expect(setCloudSyncStatus).not.toHaveBeenCalled()
     expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 
-  it('creates a gist on first sync and stores the id', async () => {
+  it('pushes the backup and analysis files to the bridge in one call', async () => {
     ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      mockResponse({ body: { id: 'new-gist-id' } }),
+      mockResponse({ body: { ok: true } }),
     )
     const { store, setCloudSyncStatus } = makeStore()
-    await syncOnce(store)
-    expect(setCloudSyncStatus).toHaveBeenCalledWith({
-      gistId: 'new-gist-id',
-      lastSyncAt: expect.any(String),
-      lastError: null,
-    })
-  })
-
-  it('updates an existing gist when id is set', async () => {
-    ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      mockResponse({ status: 200, body: {} }),
-    )
-    const { store, setCloudSyncStatus } = makeStore({
-      cloudSync: { enabled: true, token: 'tok', gistId: 'existing', lastSyncAt: null, lastError: null },
-    } as Partial<State>)
     await syncOnce(store)
     const call = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
-    expect(call[0]).toBe('https://api.github.com/gists/existing')
-    expect(call[1].method).toBe('PATCH')
+    expect(call[0]).toBe(URL)
+    expect(call[1].method).toBe('POST')
+    expect(call[1].headers['Content-Type']).toMatch(/^text\/plain/)
+    const body = JSON.parse(call[1].body)
+    expect(body.secret).toBe('sec')
+    expect(body.action).toBe('write')
+    expect(Object.keys(body.files).sort()).toEqual([ANALYSIS_FILENAME, BACKUP_FILENAME, SET_LOG_FILENAME].sort())
+    expect(body.files[BACKUP_FILENAME]).toBe('{"payload":true}')
     expect(setCloudSyncStatus).toHaveBeenCalledWith({
       lastSyncAt: expect.any(String),
       lastError: null,
     })
   })
 
-  it('records an error on auth failure and does not clear it', async () => {
+  it('records a secret mismatch from the bridge', async () => {
     ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      mockResponse({ status: 401 }),
+      mockResponse({ body: { ok: false, error: 'auth' } }),
     )
     const { store, setCloudSyncStatus } = makeStore()
     await syncOnce(store)
     expect(setCloudSyncStatus).toHaveBeenCalledWith({
-      lastError: expect.stringMatching(/token/i),
+      lastError: expect.stringMatching(/secret/i),
+    })
+  })
+
+  it('reports a non-JSON (Apps Script HTML error) response as a deployment problem', async () => {
+    ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token <')
+      },
+    } as unknown as Response)
+    const { store, setCloudSyncStatus } = makeStore()
+    await syncOnce(store)
+    expect(setCloudSyncStatus).toHaveBeenCalledWith({
+      lastError: expect.stringMatching(/deployment/i),
+    })
+  })
+
+  it('records a network error when fetch throws', async () => {
+    ;(globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    const { store, setCloudSyncStatus } = makeStore()
+    await syncOnce(store)
+    expect(setCloudSyncStatus).toHaveBeenCalledWith({
+      lastError: expect.stringMatching(/network/i),
     })
   })
 

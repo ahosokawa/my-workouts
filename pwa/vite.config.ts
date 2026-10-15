@@ -7,10 +7,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 // only into production builds — the dev server needs inline scripts for
 // react-refresh, which this policy forbids.
 // 'unsafe-inline' styles: required by React style={{}} attributes.
-// connect-src api.github.com: gist cloud sync.
+// connect-src script.google.com + script.googleusercontent.com: Drive sync
+// via the Apps Script bridge (the /exec POST 302s to googleusercontent).
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-  "img-src 'self' data:; connect-src 'self' https://api.github.com; " +
+  "img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; " +
   "manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'; " +
   "object-src 'none'; frame-src 'none'"
 

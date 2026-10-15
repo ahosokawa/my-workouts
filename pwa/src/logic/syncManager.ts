@@ -1,27 +1,29 @@
 import type { StoreApi } from 'zustand'
-import { createGist, updateGist, errorMessage } from './gistSync'
+import type { SetLog, UserProfile, WilksEntry, WorkoutSession } from '../types'
+import { pushFiles, errorMessage } from './driveSync'
+import { buildAnalysisFiles } from './analysis'
+import { BACKUP_FILENAME } from './driveFiles'
 
 // Keep this interface minimal (dependency-injected) so it's easy to test and
 // avoids a cyclic import between the store and this module.
 export interface SyncableStore {
   getState: () => {
-    profile: unknown
-    sessions: unknown
-    setLogs: unknown
-    wilksEntries: unknown
+    profile: UserProfile | null
+    sessions: WorkoutSession[]
+    setLogs: SetLog[]
+    wilksEntries: WilksEntry[]
     customAccessories: unknown
     customSupplemental: unknown
     savedExercises: unknown
     cloudSync: {
       enabled: boolean
-      token: string
-      gistId: string | null
+      bridgeUrl: string
+      secret: string
       lastSyncAt: string | null
       lastError: string | null
     } | null
     exportData: () => string
     setCloudSyncStatus: (partial: {
-      gistId?: string
       lastSyncAt?: string | null
       lastError?: string | null
     }) => void
@@ -137,31 +139,31 @@ function changed(a: Snapshot, b: Snapshot): boolean {
   )
 }
 
+/** Everything written to the Drive folder in one bridge call: the raw backup
+ *  plus the Claude-facing analysis files. */
+export function buildSyncFiles(state: ReturnType<SyncableStore['getState']>): Record<string, string> {
+  return {
+    [BACKUP_FILENAME]: state.exportData(),
+    ...buildAnalysisFiles(state),
+  }
+}
+
 export async function syncOnce(store: SyncableStore): Promise<void> {
-  const { cloudSync, exportData, setCloudSyncStatus } = store.getState()
-  if (!cloudSync || !cloudSync.enabled || !cloudSync.token) return
+  const state = store.getState()
+  const { cloudSync, setCloudSyncStatus } = state
+  if (!cloudSync || !cloudSync.enabled || !cloudSync.bridgeUrl) return
 
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     setCloudSyncStatus({ lastError: errorMessage('network') })
     return
   }
 
-  const json = exportData()
+  const files = buildSyncFiles(state)
   const now = new Date().toISOString()
-
-  if (cloudSync.gistId) {
-    const res = await updateGist(cloudSync.token, cloudSync.gistId, json)
-    if (!res.ok) {
-      setCloudSyncStatus({ lastError: errorMessage(res.error) })
-      return
-    }
-    setCloudSyncStatus({ lastSyncAt: now, lastError: null })
-  } else {
-    const res = await createGist(cloudSync.token, json)
-    if (!res.ok) {
-      setCloudSyncStatus({ lastError: errorMessage(res.error) })
-      return
-    }
-    setCloudSyncStatus({ gistId: res.value.gistId, lastSyncAt: now, lastError: null })
+  const res = await pushFiles(cloudSync.bridgeUrl, cloudSync.secret, files)
+  if (!res.ok) {
+    setCloudSyncStatus({ lastError: errorMessage(res.error) })
+    return
   }
+  setCloudSyncStatus({ lastSyncAt: now, lastError: null })
 }

@@ -343,13 +343,13 @@ export interface SupplementalOverride {
 }
 
 // ============================================================
-// Cloud Sync (GitHub Gist)
+// Cloud Sync (Google Drive via an Apps Script bridge)
 // ============================================================
 
 export interface CloudSyncConfig {
   enabled: boolean
-  token: string          // GitHub classic PAT, gist scope only
-  gistId: string | null  // null until first successful sync
+  bridgeUrl: string          // Apps Script web app /exec URL
+  secret: string             // shared secret baked into the deployed script
   lastSyncAt: string | null  // ISO date of last successful sync
   lastError: string | null   // human-readable error from last attempt
 }

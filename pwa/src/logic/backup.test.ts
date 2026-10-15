@@ -119,11 +119,11 @@ describe('serializeBackup — v2 round-trip', () => {
     data.programSupplementalArchive = {}
     data.restNotifyEnabled = false
     data.restNotifyMinutes = 5
-    data.cloudSync = { enabled: true, token: 'ghp_secret', gistId: 'g', lastSyncAt: null, lastError: null }
+    data.cloudSync = { enabled: true, bridgeUrl: 'https://script.google.com/macros/s/X/exec', secret: 'ghp_secret', lastSyncAt: null, lastError: null }
     return data
   }
 
-  it('writes version 2 with the exact expected key set (never the PAT)', () => {
+  it('writes version 2 with the exact expected key set (never the sync secret)', () => {
     const parsed = JSON.parse(serializeBackup(populatedData()))
     expect(Object.keys(parsed).sort()).toEqual(
       [

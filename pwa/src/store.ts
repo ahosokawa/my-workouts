@@ -80,7 +80,7 @@ interface AppState {
 
   // Cloud sync actions
   setCloudSync: (config: CloudSyncConfig | null) => void
-  setCloudSyncStatus: (partial: Partial<Pick<CloudSyncConfig, 'gistId' | 'lastSyncAt' | 'lastError'>>) => void
+  setCloudSyncStatus: (partial: Partial<Pick<CloudSyncConfig, 'lastSyncAt' | 'lastError'>>) => void
 
   // Data management
   resetAll: () => void
