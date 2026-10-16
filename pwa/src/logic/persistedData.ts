@@ -26,6 +26,15 @@ import { getProgramAccessories, mainLiftForDay } from './programs'
 // ============================================================
 
 export interface ActiveWorkout {
+  units?: 'lbs' | 'kg'
+  prescription?: AccessoryExercise[]
+  programType?: ProgramType
+  cycleNumber?: number
+  bodyWeightLbs?: number | null
+  accRir?: Record<string, number | null>
+  technique?: Record<string, boolean>
+  warmups?: string[]
+  enabledOptional?: string[]
   isActive: boolean
   startTime: number | null
   // Identity of the workout in progress, pinned at startSession so a mid-session

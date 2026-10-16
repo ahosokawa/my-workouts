@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "exportedAt": "2026-05-12T00:00:00.000Z",
+  "profile": {
+    "squatOneRepMax": 265,
+    "benchOneRepMax": 185,
+    "deadliftOneRepMax": 343,
+    "pressOneRepMax": 133,
+    "squatTM": 225,
+    "benchTM": 157.5,
+    "deadliftTM": 290,
+    "pressTM": 112.5,
+    "currentWeek": 4,
+    "currentDay": 4,
+    "cycleNumber": 5,
+    "isCycleComplete": false,
+    "currentVariant": "bbb",
+    "leaderCycleCount": 0,
+    "anchorCycleCount": 0,
+    "tmPercentage": 85,
+    "sex": "male",
+    "units": "lbs",
+    "isDeloading": false,
+    "deloadType": null,
+    "deloadDay": 1,
+    "bodyWeightLbs": 180,
+    "bodyWeightLastUpdated": "2026-05-12T00:00:00.000Z",
+    "createdAt": "2026-05-01T00:00:00.000Z",
+    "programType": "upper_lower",
+    "cycleWeeks": 7,
+    "dayOrder": [
+      2,
+      1,
+      4,
+      3
+    ],
+    "completedDaysThisWeek": [],
+    "hypertrophyTopSets": {
+      "1": 192.5,
+      "2": 135,
+      "3": 247.5,
+      "4": 95
+    }
+  },
+  "sessions": [
+    {
+      "id": "handoff-0",
+      "date": "2026-10-12T18:00:00.000Z",
+      "liftRawValue": 2,
+      "week": 4,
+      "cycleNumber": 5,
+      "variant": "bbb",
+      "durationSeconds": 175140
+    },
+    {
+      "id": "handoff-1",
+      "date": "2026-10-13T18:00:00.000Z",
+      "liftRawValue": 1,
+      "week": 4,
+      "cycleNumber": 5,
+      "variant": "bbb",
+      "durationSeconds": 3600
+    },
+    {
+      "id": "handoff-2",
+      "date": "2026-10-15T18:00:00.000Z",
+      "liftRawValue": 4,
+      "week": 4,
+      "cycleNumber": 5,
+      "variant": "bbb",
+      "durationSeconds": 3600
+    }
+  ],
+  "setLogs": [
+    {
+      "id": "handoff-0-top",
+      "sessionId": "handoff-0",
+      "exerciseName": "Bench Press",
+      "isMainLift": true,
+      "setIndex": 3,
+      "weight": 145,
+      "targetReps": 6,
+      "actualReps": 6,
+      "isAMRAP": true,
+      "isCompleted": true,
+      "completedAt": "2026-10-12T18:00:00.000Z",
+      "rir": 2,
+      "repRangeMin": 5,
+      "repRangeMax": 6
+    },
+    {
+      "id": "handoff-0-incline0",
+      "sessionId": "handoff-0",
+      "exerciseName": "Incline DB Bench Press",
+      "isMainLift": false,
+      "setIndex": 0,
+      "weight": 50,
+      "targetReps": 10,
+      "actualReps": null,
+      "isAMRAP": false,
+      "isCompleted": true,
+      "completedAt": "2026-10-12T18:00:00.000Z"
+    },
+    {
+      "id": "handoff-0-incline1",
+      "sessionId": "handoff-0",
+      "exerciseName": "Incline DB Bench Press",
+      "isMainLift": false,
+      "setIndex": 1,
+      "weight": 50,
+      "targetReps": 7,
+      "actualReps": null,
+      "isAMRAP": false,
+      "isCompleted": true,
+      "completedAt": "2026-10-12T18:00:00.000Z"
+    },
+    {
+      "id": "handoff-0-incline2",
+      "sessionId": "handoff-0",
+      "exerciseName": "Incline DB Bench Press",
+      "isMainLift": false,
+      "setIndex": 2,
+      "weight": 50,
+      "targetReps": 6,
+      "actualReps": null,
+      "isAMRAP": false,
+      "isCompleted": true,
+      "completedAt": "2026-10-12T18:00:00.000Z"
+    },
+    {
+      "id": "handoff-1-top",
+      "sessionId": "handoff-1",
+      "exerciseName": "Squat",
+      "isMainLift": true,
+      "setIndex": 3,
+      "weight": 200,
+      "targetReps": 6,
+      "actualReps": 6,
+      "isAMRAP": true,
+      "isCompleted": true,
+      "completedAt": "2026-10-13T18:00:00.000Z",
+      "rir": 2,
+      "repRangeMin": 5,
+      "repRangeMax": 6
+    },
+    {
+      "id": "handoff-2-top",
+      "sessionId": "handoff-2",
+      "exerciseName": "Overhead Press",
+      "isMainLift": true,
+      "setIndex": 3,
+      "weight": 107.5,
+      "targetReps": 6,
+      "actualReps": 5,
+      "isAMRAP": true,
+      "isCompleted": true,
+      "completedAt": "2026-10-15T18:00:00.000Z",
+      "rir": 2,
+      "repRangeMin": 5,
+      "repRangeMax": 6
+    }
+  ],
+  "wilksEntries": [],
+  "customAccessories": {
+    "2": [
+      {
+        "id": "ul-pullup",
+        "name": "Pull-Ups",
+        "weightType": "bodyweight",
+        "sets": 4,
+        "reps": 7,
+        "repRangeMin": 6,
+        "repRangeMax": 8,
+        "progressionType": "reps_then_load"
+      },
+      {
+        "id": "ul-incline-db",
+        "name": "Incline DB Bench Press",
+        "weightType": "standard",
+        "sets": 3,
+        "reps": 9,
+        "repRangeMin": 8,
+        "repRangeMax": 10,
+        "progressionType": "double_progression"
+      }
+    ],
+    "1": [
+      {
+        "id": "ul-rdl",
+        "name": "Romanian Deadlift",
+        "weightType": "barbell",
+        "sets": 3,
+        "reps": 9,
+        "repRangeMin": 8,
+        "repRangeMax": 10,
+        "progressionType": "double_progression"
+      }
+    ],
+    "4": [
+      {
+        "id": "ul-csr",
+        "name": "Chest-Supported DB Row",
+        "weightType": "standard",
+        "sets": 4,
+        "reps": 9,
+        "repRangeMin": 8,
+        "repRangeMax": 10,
+        "progressionType": "double_progression"
+      }
+    ],
+    "3": [
+      {
+        "id": "ul-front-sq",
+        "name": "Front Squat",
+        "weightType": "barbell",
+        "sets": 3,
+        "reps": 11,
+        "repRangeMin": 10,
+        "repRangeMax": 12,
+        "progressionType": "double_progression"
+      }
+    ]
+  },
+  "savedExercises": [],
+  "fixtureNote": "Synthetic fixture using only examples in the handoff, not a production export."
+}

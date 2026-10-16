@@ -50,7 +50,7 @@ function DeloadWorkoutViewInner({ profile }: { profile: UserProfile }) {
       return lift ? trainingMaxFor(profile, lift) : 0
     })(),
     dayOrder: profile.dayOrder,
-    accessories: dayAccessories,
+    accessories: def.id === 'upper_lower_chest_arms' ? dayAccessories.filter(ex => !ex.optional) : dayAccessories,
   })
   const lift = plan.lift
 

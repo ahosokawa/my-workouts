@@ -15,6 +15,7 @@ import {
 import { prescribedSets } from './calculator'
 import { hypertrophyMainSets } from './hypertrophyCalculator'
 import {
+  getProgram, slotForDay,
   dayLabel,
   getProgramAccessories,
   mainLiftForDay,
@@ -44,7 +45,7 @@ function buildOne(
   const programType = profile.programType ?? ProgramType.FiveThreeOne
   const isTopSetEngine = usesTopSetEngine(programType)
   const lift = mainLiftForDay(programType, day, profile.dayOrder)
-  const accessoriesSlot = lift ?? ML.ShoulderPress
+  const accessoriesSlot = slotForDay(getProgram(programType), day, profile.dayOrder) ?? ML.ShoulderPress
 
   if (isTopSetEngine) {
     const accessories =

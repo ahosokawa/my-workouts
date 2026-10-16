@@ -150,3 +150,5 @@ The PWA manifest and service worker are configured in `vite.config.ts` via `vite
 - **Register type:** `autoUpdate` (service worker updates silently)
 - **Icons:** `public/icon-192.png` and `public/icon-512.png`
 - **iOS support:** `apple-mobile-web-app-capable` and `apple-touch-icon` meta tags in `index.html`
+
+See [Upper/Lower — Hypertrophy program](docs/chest-arms-program.md) for selection, progression, compatibility and rollback details.

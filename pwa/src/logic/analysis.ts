@@ -64,6 +64,8 @@ function weekStart(iso: string): string {
 const isLift = (v: number): v is MainLift => (MAIN_LIFTS as readonly number[]).includes(v)
 
 function setType(l: SetLog): string {
+  if (l.isWarmup) return 'warmup'
+  if (l.exerciseId && l.repRangeMin != null) return 'working'
   if (!l.isAMRAP) return ''
   return isTopSetLog(l) ? 'top_set' : 'amrap'
 }
@@ -84,6 +86,7 @@ function volume(logs: SetLog[]): number {
 }
 
 function sessionFocus(s: WorkoutSession, logs: SetLog[]): string {
+  if (s.dayLabel) return s.dayLabel
   if (isLift(s.liftRawValue)) return liftDisplayName(s.liftRawValue)
   return logs.find((l) => l.isMainLift)?.exerciseName ?? 'Accessories only'
 }
@@ -187,7 +190,7 @@ export function buildAnalysisFiles(
         focus,
         l.exerciseName,
         l.isMainLift ? 'yes' : 'no',
-        l.setIndex + 1,
+        l.isWarmup ? l.setIndex + 4 : l.setIndex + 1,
         l.weight,
         l.targetReps,
         l.actualReps,

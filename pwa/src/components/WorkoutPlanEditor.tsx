@@ -12,6 +12,7 @@ import {
 } from '../types'
 import type { AccessoryExercise, ExerciseDef, SupplementalOverride, Units, ProgramType as ProgramTypeT, ProgressionType as ProgressionTypeT } from '../types'
 import type { VariantConfig } from '../logic/variants'
+import { workingWeightDisplay } from '../logic/chestArms'
 import { roundWeight } from '../logic/calculator'
 import { dayLabel, dayHasTopSetMain, usesTopSetEngine, getProgram, getProgramAccessories, effectiveDayOrder as programDayOrder } from '../logic/programs'
 import ExerciseDefFields from './ExerciseDefFields'
@@ -315,7 +316,7 @@ export default function WorkoutPlanEditor({
                   </span>
                   <span className="text-xs text-[#8e8e93] ml-2">
                     {isTopSetProgram
-                      ? (hasTopSet ? `Top set: ${liftDisplayName(lift)}` : 'No top-set main')
+                      ? (hasTopSet ? `Top set: ${liftDisplayName(lift)}` : programType === ProgramType.ChestArms ? 'Working sets' : 'No top-set main')
                       : suppSummary(lift)}
                     {' · '}
                     {dayAccessories.length} {dayAccessories.length === 1 ? 'accessory' : 'accessories'}
@@ -373,6 +374,14 @@ export default function WorkoutPlanEditor({
                             <div>
                               <div className="text-sm">{ex.name}</div>
                               <div className="text-xs text-[#8e8e93]">{accessorySecondary(ex)}</div>
+                              {programType === ProgramType.ChestArms && (ex.progressionType === ProgressionType.Double || ex.progressionType === ProgressionType.RepsThenLoad) && <label className="text-xs text-[#8e8e93]">
+                                Suggested increment ({units})
+                                <input aria-label={`${ex.name} increment`} type="number" min="0.5" step="0.5"
+                                  className="w-16 ml-2" value={workingWeightDisplay(ex.incrementLbs ?? 5, units)}
+                                  onChange={e => { const value = Number(e.target.value); if (value > 0 && Number.isFinite(value)) onAccessoriesChange({
+                                    ...accessories, [lift]: dayAccessories.map(item => item.id === ex.id ? {...item, incrementLbs: toStorageLbs(value, units)} : item)
+                                  }) }} />
+                              </label>}
                             </div>
                             <button
                               onClick={() => removeAccessory(lift, ex.id)}

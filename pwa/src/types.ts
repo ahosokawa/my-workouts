@@ -157,7 +157,7 @@ export type DeloadType = (typeof DeloadType)[keyof typeof DeloadType]
 // Program Type (5/3/1 vs 4-Day Hypertrophy)
 // ============================================================
 
-export const ProgramType = { FiveThreeOne: '531', Hypertrophy: 'hypertrophy', UpperLower: 'upper_lower' } as const
+export const ProgramType = { FiveThreeOne: '531', Hypertrophy: 'hypertrophy', UpperLower: 'upper_lower', ChestArms: 'upper_lower_chest_arms' } as const
 export type ProgramType = (typeof ProgramType)[keyof typeof ProgramType]
 
 /** Per-exercise progression strategy. Spec §5. */
@@ -240,9 +240,19 @@ export interface WorkoutSession {
   cycleNumber: number
   durationSeconds: number
   variant?: ProgramVariant
+  programType?: ProgramType
+  dayLabel?: string
+  programDay?: number
+  prescription?: AccessoryExercise[]
+  workingSetsCompleted?: boolean
 }
 
 export interface SetLog {
+  exerciseId?: string
+  isWarmup?: boolean
+  techniqueConfirmed?: boolean
+  weightType?: AccessoryWeightType
+
   id: string
   sessionId: string
   exerciseName: string
@@ -254,9 +264,9 @@ export interface SetLog {
   isAMRAP: boolean
   isCompleted: boolean
   completedAt: string | null  // ISO date
-  /** Reps-in-reserve self-report. 0/1/2/3 where 3 means "3 or more". Hypertrophy top sets only. */
+  /** Reps-in-reserve self-report. 0/1/2/3 where 3 means "3 or more". Top sets and Chest & Arms working sets. */
   rir?: number | null
-  /** Prescribed rep-range for top sets (copied from PrescribedSet at save). Absent on 5/3/1 AMRAP and older logs. */
+  /** Prescribed rep-range snapshot for top sets or straight working sets. Absent on 5/3/1 AMRAP and older logs. */
   repRangeMin?: number
   repRangeMax?: number
 }
@@ -326,6 +336,10 @@ export type MuscleGroup = (typeof MUSCLE_GROUPS)[number]
  *  `muscleGroups` optionally overrides the name-based inference used by the
  *  weekly-volume metrics. */
 export interface AccessoryExercise extends ExerciseDef {
+  optional?: boolean
+  warmup?: boolean
+  incrementLbs?: number
+
   sets: number
   reps: number
   repRangeMin?: number

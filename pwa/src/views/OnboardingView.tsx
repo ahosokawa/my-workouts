@@ -1,10 +1,11 @@
+import ProgramPicker from '../components/ProgramPicker'
 import { useState } from 'react'
 import { useStore } from '../store'
 import { MAIN_LIFTS, ProgramVariant, PhaseType, ProgramType, toStorageLbs } from '../types'
 import type { AccessoryExercise, SupplementalOverride, Units, ProgramType as ProgramTypeT, MainLift } from '../types'
 import { roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
-import { PROGRAMS, getProgramAccessories, usesTopSetEngine, programLabel, programDescription } from '../logic/programs'
+import { getProgramAccessories, usesTopSetEngine, programLabel } from '../logic/programs'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
 
@@ -156,23 +157,7 @@ export default function OnboardingView() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 mb-4">
-          {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => {
-            const isSelected = selectedProgram === p
-            return (
-              <button
-                key={p}
-                onClick={() => pickProgram(p)}
-                className={`rounded-lg p-3 text-left transition-colors ${
-                  isSelected
-                    ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
-                    : 'border border-[#38383a] bg-[#1c1c1e]'
-                }`}
-              >
-                <div className="font-semibold text-sm">{programLabel(p)}</div>
-                <div className="text-xs text-[#8e8e93] mt-1">{programDescription(p)}</div>
-              </button>
-            )
-          })}
+          <ProgramPicker value={selectedProgram} onChange={pickProgram} />
         </div>
 
         {!isTopSetProgram && (
@@ -229,11 +214,16 @@ export default function OnboardingView() {
         {isTopSetProgram && (
           <div className="bg-[#1c1c1e] rounded-xl p-4 text-xs text-[#8e8e93]">
             <div className="text-white text-sm font-semibold mb-1">{programLabel(selectedProgram)} notes</div>
+            {selectedProgram === ProgramType.ChestArms ? (
+              <p>Choose working weights manually. Train Upper A → Lower A → Upper B → Lower B at 2–3 RIR initially. Complete every working set at the upper rep target with good form and logged RIR to see an optional increase suggestion. OHP is off unless enabled. Training maxes do not set this program’s working loads.</p>
+            ) : <>
             Training maxes are computed at 85% of 1RM. Top set is autoregulated by RPE (cap at RPE 8 / 2 RIR).
             Accessories run on double progression — when all sets hit the top of the range, the suggested weight bumps up.
             {selectedProgram === ProgramType.UpperLower
               ? ' Trains Upper A → Lower A → Upper B → Lower B with a top set on all four days.'
               : ' Cardio days from the spec are not tracked here.'}
+            </>}
+
           </div>
         )}
 

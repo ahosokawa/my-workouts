@@ -18,6 +18,7 @@ import {
   toDisplayWeight,
   toStorageLbs,
 } from '../types'
+import { CHEST_ARMS_ACCESSORIES } from './chestArms'
 import { roundWeight } from './calculator'
 import {
   FIVE_THREE_ONE_ACCESSORIES,
@@ -100,6 +101,24 @@ const SPEC_TOP_SET_RANGES: Readonly<Record<MainLift, { min: number; max: number 
 }
 
 export const PROGRAMS: Record<ProgramType, ProgramDefinition> = {
+  [ProgramType.ChestArms]: {
+    id: ProgramType.ChestArms,
+    label: 'Upper/Lower — Hypertrophy',
+    shortLabel: 'Upper/Lower · Hypertrophy',
+    description: 'Four days, straight working sets and double progression, with chest and arms emphasis',
+    // Reuse the rep-range/accessory engine with no AMRAP main block.
+    engine: 'topSet', cycleWeeks: 7, lockedTmPercentage: null,
+    dayOrder: { kind: 'fixed', order: [ML.BenchPress, ML.Squat, ML.ShoulderPress, ML.Deadlift] },
+    days: [
+      { label: 'Upper A — Chest', chipLabel: 'Upper A', hasMain: false },
+      { label: 'Lower A — Squat', chipLabel: 'Lower A', hasMain: false },
+      { label: 'Upper B — Chest & Arms', chipLabel: 'Upper B', hasMain: false },
+      { label: 'Lower B — Hinge', chipLabel: 'Lower B', hasMain: false },
+    ],
+    defaultAccessories: CHEST_ARMS_ACCESSORIES,
+    deloadPlan: { deload: 'topSet60x3x3', tmTest: 'rpeRetest', accessoryVolumeFactor: 0.5 },
+    usesVariants: false,
+  },
   [ProgramType.FiveThreeOne]: {
     id: ProgramType.FiveThreeOne,
     label: '5/3/1',
@@ -138,8 +157,8 @@ export const PROGRAMS: Record<ProgramType, ProgramDefinition> = {
   },
   [ProgramType.UpperLower]: {
     id: ProgramType.UpperLower,
-    label: '4-Day Upper/Lower',
-    shortLabel: 'Upper/Lower',
+    label: 'Upper/Lower — Top Set',
+    shortLabel: 'Upper/Lower · Top Set',
     description: 'Upper/Lower split, top sets on all 4 days, 7-week cycles',
     engine: 'topSet',
     cycleWeeks: 7,

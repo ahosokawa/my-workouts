@@ -114,7 +114,7 @@ describe('Upper/Lower program', () => {
   it('has its own day labels and program label', () => {
     expect(dayLabel(ProgramType.UpperLower, 1)).toBe('Upper A — Chest/Horizontal')
     expect(dayLabel(ProgramType.UpperLower, 4)).toBe('Lower B — Hinge')
-    expect(programLabel(ProgramType.UpperLower)).toBe('4-Day Upper/Lower')
+    expect(programLabel(ProgramType.UpperLower)).toBe('Upper/Lower — Top Set')
   })
 })
 

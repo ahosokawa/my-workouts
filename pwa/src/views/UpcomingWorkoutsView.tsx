@@ -243,7 +243,7 @@ function AccessoryRow({
   return (
     <div className="py-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-base">{ex.name}</span>
+        <span className="text-base">{ex.name}{ex.optional ? " (optional, off by default)" : ""}</span>
         <span className="text-sm text-[#8e8e93] tabular-nums">
           {weightLabel ? `${weightLabel} · ` : ''}{ex.sets} × {repsLabel}
         </span>

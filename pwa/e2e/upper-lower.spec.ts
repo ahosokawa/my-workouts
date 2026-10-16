@@ -18,11 +18,11 @@ test.describe('4-Day Upper/Lower — onboarding', () => {
 
     // Step 2: program picker — choose Upper/Lower
     await expect(page.getByText('Choose Your Program')).toBeVisible()
-    await page.getByRole('button', { name: /4-Day Upper\/Lower/ }).click()
+    await page.getByRole('button', { name: /Upper\/Lower — Top Set/ }).click()
 
     // Top-set-engine program: the 5/3/1 variant section is hidden, engine notes are shown
     await expect(page.getByRole('button', { name: /^FSL/ })).toBeHidden()
-    await expect(page.getByText('4-Day Upper/Lower notes')).toBeVisible()
+    await expect(page.getByText('Upper/Lower — Top Set notes')).toBeVisible()
 
     await page.getByRole('button', { name: 'Continue' }).click()
 
@@ -35,7 +35,7 @@ test.describe('4-Day Upper/Lower — onboarding', () => {
 
     // Lands on Day 1 = Upper A (Bench top set), with the program tag in the subheader
     await expect(page.getByText(/Week 1: Upper A — Chest\/Horizontal/)).toBeVisible()
-    await expect(page.getByText(/Cycle 1 · Day 1 of 4 · 4-Day Upper\/Lower/)).toBeVisible()
+    await expect(page.getByText(/Cycle 1 · Day 1 of 4 · Upper\/Lower — Top Set/)).toBeVisible()
   })
 })
 
@@ -84,14 +84,14 @@ test.describe('4-Day Upper/Lower — settings program switcher', () => {
     await expect(page.getByText(/· BBB$/)).toBeVisible()
 
     await page.getByRole('link', { name: /settings/i }).click()
-    await page.getByRole('button', { name: 'Upper/Lower', exact: true }).click()
+    await page.getByRole('button', { name: 'Upper/Lower — Top Set', exact: true }).click()
 
-    await expect(page.getByText('Switch to 4-Day Upper/Lower?')).toBeVisible()
+    await expect(page.getByText('Switch to Upper/Lower — Top Set?')).toBeVisible()
     await page.getByRole('button', { name: 'Switch' }).click()
 
     // Day 1 of Upper/Lower is Upper A (Bench), with the program tag
     await page.getByRole('link', { name: /workout/i }).click()
     await expect(page.getByText(/Week 1: Upper A — Chest\/Horizontal/)).toBeVisible()
-    await expect(page.getByText(/· 4-Day Upper\/Lower/)).toBeVisible()
+    await expect(page.getByText(/· Upper\/Lower — Top Set/)).toBeVisible()
   })
 })

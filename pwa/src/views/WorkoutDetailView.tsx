@@ -2,6 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { liftDisplayName, liftFromDay, displayRound, isTopSetLog } from '../types'
 import { barbellWeight } from '../logic/plates'
+import { programLabel } from '../logic/programs'
+import { workingWeightDisplay } from '../logic/chestArms'
 import { getVariantConfig } from '../logic/variants'
 import PlateBreakdown from '../components/PlateBreakdown'
 
@@ -51,9 +53,9 @@ export default function WorkoutDetailView() {
       {/* Header */}
       <div className="bg-[#1c1c1e] rounded-xl p-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-bold">Week {session.week}: {lift ? liftDisplayName(lift) : 'Unknown'}</h1>
+          <h1 className="text-lg font-bold">Week {session.week}: {session.dayLabel ?? (lift ? liftDisplayName(lift) : 'Unknown')}</h1>
           <span className="text-xs px-1.5 py-0.5 rounded bg-[#2c2c2e] text-[#8e8e93]">
-            {getVariantConfig(session.variant ?? 'fsl').shortLabel}
+            {session.programType === 'upper_lower_chest_arms' ? programLabel(session.programType) : getVariantConfig(session.variant ?? 'fsl').shortLabel}
           </span>
         </div>
         <p className="text-xs text-[#8e8e93]">
@@ -62,7 +64,7 @@ export default function WorkoutDetailView() {
       </div>
 
       {/* Main Lift */}
-      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden">
+      {mainLogs.length > 0 && <div className="bg-[#1c1c1e] rounded-xl overflow-hidden">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">{lift ? liftDisplayName(lift) : 'Main Lift'}</h2>
         </div>
@@ -88,7 +90,7 @@ export default function WorkoutDetailView() {
             )
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Accessories */}
       {Object.entries(accGroups).map(([name, groupLogs]) => (
@@ -102,10 +104,10 @@ export default function WorkoutDetailView() {
                 <span className={`text-lg ${log.isCompleted ? 'text-[var(--color-green)]' : 'text-[#48484a]'}`}>
                   {log.isCompleted ? '✓' : '○'}
                 </span>
-                <span className="text-sm">Set {log.setIndex + 1}</span>
+                <span className="text-sm">{log.isWarmup ? `Warm-up ${log.setIndex + 4}` : `Set ${log.setIndex + 1}`}</span>
                 <div className="flex-1" />
-                {log.weight > 0 && <span className="text-sm text-[#8e8e93]">{displayRound(log.weight, units)} {units}</span>}
-                <span className="text-sm">{log.targetReps} reps</span>
+                {log.weight > 0 && <span className="text-sm text-[#8e8e93]">{session.programType === 'upper_lower_chest_arms' ? workingWeightDisplay(log.weight, units) : displayRound(log.weight, units)} {units}</span>}
+                <span className="text-sm">{session.programType === 'upper_lower_chest_arms' ? log.actualReps ?? log.targetReps : log.targetReps} reps{session.programType === 'upper_lower_chest_arms' && log.rir != null ? ` · RIR ${log.rir === 3 ? "3+" : log.rir}` : ""}</span>
               </div>
             ))}
           </div>

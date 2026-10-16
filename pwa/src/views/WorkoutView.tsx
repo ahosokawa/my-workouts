@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
-import { prescribedSets, amrapMinimum } from '../logic/calculator'
+import { prescribedSets, amrapMinimum, roundWeight } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
-import { getProgram, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
+import { workingSetGuidance, workingWeightDisplay } from '../logic/chestArms'
+import { getProgram, slotForDay, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
   recentMainLiftTopSets, lastAccessorySession,
@@ -28,6 +29,7 @@ export default function WorkoutView() {
 }
 
 function WorkoutViewInner({ profile }: { profile: UserProfile }) {
+  const sessions = useStore((s) => s.sessions)
   const setLogs = useStore((s) => s.setLogs)
   const saveWorkout = useStore((s) => s.saveWorkout)
   const advanceDay = useStore((s) => s.advanceDay)
@@ -41,13 +43,15 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const customSupplemental = useStore((s) => s.customSupplemental)
 
   const elapsed = useElapsedTimer(aw.isActive, aw.startTime)
+  const [validationMessage, setValidationMessage] = useState('')
   const [showFinishAlert, setShowFinishAlert] = useState(false)
   const finishingRef = useRef(false)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
   const [topSetRir, setTopSetRir] = useState<number | null>(null)
 
-  const programType = profile.programType ?? ProgramType.FiveThreeOne
+  const programType = (aw.isActive ? aw.programType : undefined) ?? profile.programType ?? ProgramType.FiveThreeOne
+  const isChestArms = programType === ProgramType.ChestArms
   const isTopSetProgram = usesTopSetEngine(programType)
   // While a workout is in progress its day + lift are pinned (captured in
   // startSession) so a mid-session profile change — settings, cloud sync — can't
@@ -64,12 +68,13 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   // Hypertrophy day 4 (Pull Focus) has no top-set main lift — we render only accessories.
   // For 5/3/1, lift is always non-null; for hypertrophy day 4 we accept null.
   // The accessories list is keyed by the MainLift slot — Day 4 uses MainLift.ShoulderPress as the slot.
-  const accessoriesSlot = lift ?? 4
+  const accessoriesSlot = isChestArms ? (slotForDay(getProgram(programType), activeDay, profile.dayOrder) ?? 4) : (lift ?? 4)
 
-  const units = profile.units ?? 'lbs'
+  const units = (isChestArms && aw.isActive ? aw.units : undefined) ?? profile.units ?? 'lbs'
   // Bodyweight accessories pin their main weight to the profile bodyweight; null when unset.
-  const bwLbs = profile.bodyWeightLbs && profile.bodyWeightLbs > 0 ? profile.bodyWeightLbs : null
-  const bwDisplay = bwLbs != null ? displayRound(bwLbs, units) : null
+  const rawBw = isChestArms && aw.isActive ? aw.bodyWeightLbs : profile.bodyWeightLbs
+  const bwLbs = rawBw && rawBw > 0 ? rawBw : null
+  const bwDisplay = bwLbs != null ? (isChestArms ? workingWeightDisplay(bwLbs, units) : displayRound(bwLbs, units)) : null
   const liveTm = lift ? useStore.getState().getTrainingMax(lift) : 0
   const tm = aw.isActive ? (aw.tmLbs ?? liveTm) : liveTm
   const currentVariant = profile.currentVariant ?? 'fsl'
@@ -93,7 +98,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
   const suppDisplayName = suppOverride?.exercise.name ?? (lift ? liftDisplayName(lift) : '')
-  const accessories = customAccessories?.[accessoriesSlot] ?? []
+  const plan = (aw.isActive ? aw.prescription : undefined) ?? customAccessories?.[accessoriesSlot] ?? (isChestArms ? getProgram(programType).defaultAccessories[accessoriesSlot] : [])
+  const accessories = plan.filter(ex => !ex.optional || (aw.enabledOptional ?? []).includes(ex.id))
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
   const completedMain = useMemo(() => new Set(aw.completedMain), [aw.completedMain])
@@ -129,6 +135,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       if (next.size !== prev.size) return next
       return prev
     })
+    // Only completion events should collapse a section; edits must not re-collapse it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aw.completedMain, aw.completedAccessory, aw.isActive])
 
   // ---- Helpers ----
@@ -163,6 +171,11 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const defaultWeight = useCallback(
     (ex: AccessoryExercise): string => {
       const isBW = ex.weightType === AccessoryWeightType.Bodyweight
+      if (isChestArms) {
+        const prior = workingSetGuidance(ex, activeDay, sessions, setLogs).weight
+        if (isBW) return String(bwDisplay != null ? Math.max(workingWeightDisplay(prior, units), bwDisplay) : workingWeightDisplay(prior, units))
+        return prior > 0 ? String(workingWeightDisplay(prior, units)) : ''
+      }
       // Hypertrophy: prefer the progression algorithm's suggestion when it exists.
       if (isTopSetProgram) {
         const s = accessorySuggestion(ex)
@@ -184,11 +197,12 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       return ''
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setLogs, profile, units, isTopSetProgram],
+    [setLogs, sessions, activeDay, profile, units, isTopSetProgram, isChestArms],
   )
 
   const defaultReps = useCallback(
     (ex: AccessoryExercise): string => {
+      if (isChestArms) return String(ex.repRangeMin ?? ex.reps)
       if (isTopSetProgram) {
         const s = accessorySuggestion(ex)
         if (s) return String(s.reps)
@@ -200,7 +214,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       return last ? String(last.targetReps) : String(ex.reps)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setLogs, isTopSetProgram],
+    [setLogs, isTopSetProgram, isChestArms],
   )
 
   // ---- Hypertrophy progression suggestions ----
@@ -230,7 +244,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   /** Suggested next set for an accessory based on its progressionType and history. */
   function accessorySuggestion(ex: AccessoryExercise): { weight: number; reps: number; message: string } | null {
-    if (!isTopSetProgram) return null
+    if (!isTopSetProgram || isChestArms) return null
     const pType = ex.progressionType ?? ProgressionType.Fixed
     if (pType === ProgressionType.Fixed || pType === ProgressionType.RepsOnly || pType === ProgressionType.RomStages) return null
     const range = ex.repRangeMin !== undefined && ex.repRangeMax !== undefined
@@ -298,6 +312,8 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       : amrapMinimum(profile!.currentWeek)
     updateAW({
       isActive: true,
+      ...(isChestArms ? { prescription: structuredClone(accessories), programType, units, cycleNumber: profile.cycleNumber,
+        bodyWeightLbs: profile.bodyWeightLbs, accRir: {}, technique: {}, warmups: [] } : {}),
       startTime: Date.now(),
       day: profile.currentDay,
       liftRawValue: lift ?? 0,
@@ -340,6 +356,15 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       updateAW({ completedMain: Array.from(next) })
     } else {
       const key = id as string
+      if (isChestArms && !completedAccessory.has(key)) {
+        const reps = Number(aw.accReps[key])
+        const ex = accessories.find(e => Array.from({length: e.sets}, (_, i) => `${e.name}-${i}`).includes(key))
+        if (!Number.isInteger(reps) || reps <= 0 || !ex) { setValidationMessage('Enter positive whole reps before completing a set.'); return }
+        const weight = Number(aw.accWeights[key])
+        if (ex.weightType !== AccessoryWeightType.NoWeight && (!Number.isFinite(weight) || weight < 0 ||
+          (weight === 0 && (ex.weightType !== AccessoryWeightType.Bodyweight || bwDisplay == null)))) { setValidationMessage('Enter a valid working weight before completing a set.'); return }
+        setValidationMessage('')
+      }
       const next = new Set(completedAccessory)
       if (next.has(key)) {
         next.delete(key)
@@ -481,7 +506,10 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           setIndex: i,
           weight: toStorageLbs(accW, units),  // user entered in display units
           targetReps: Number(aw.accReps[key] || String(ex.reps)) || ex.reps,
-          actualReps: null,
+          actualReps: isChestArms && completed ? Number(aw.accReps[key]) : null,
+          ...(isChestArms ? { exerciseId: ex.id, weightType: ex.weightType,
+            repRangeMin: ex.repRangeMin, repRangeMax: ex.repRangeMax,
+            rir: aw.accRir?.[key] ?? null, techniqueConfirmed: aw.technique?.[ex.id] ?? false } : {}),
           isAMRAP: false,
           isCompleted: completed,
           completedAt: completed ? new Date().toISOString() : null,
@@ -489,12 +517,33 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       }
     }
 
+    if (isChestArms) {
+      for (const ex of accessories.filter(e => e.warmup)) {
+        for (let i = 0; i < 3; i++) {
+          const markedComplete = (aw.warmups ?? []).includes(`${ex.id}-${i}`)
+          const key = `warmup-${ex.id}-${i}`
+          const workingWeight = Number(aw.accWeights[`${ex.name}-0`]) || 0
+          const weight = Number(aw.accWeights[key] ?? roundWeight(workingWeight * [0.5, 0.7, 0.85][i], units))
+          const reps = Number(aw.accReps[key] ?? [5, 3, 2][i])
+          const valid = Number.isFinite(weight) && weight >= 0 && Number.isInteger(reps) && reps > 0
+          const completed = markedComplete && valid
+          logEntries.push({ exerciseId: ex.id, exerciseName: ex.name, isMainLift: false,
+            isWarmup: true, setIndex: i - 3, weight: toStorageLbs(Number.isFinite(weight) && weight >= 0 ? weight : 0, units),
+            targetReps: valid ? reps : [5,3,2][i], actualReps: completed ? reps : null,
+            isAMRAP: false, isCompleted: completed, completedAt: completed ? new Date().toISOString() : null })
+        }
+      }
+    }
     saveWorkout(
       {
         date: new Date().toISOString(),
         liftRawValue: lift ?? 0,  // 0 = no main lift (hypertrophy Pull day)
         week: activeWeek,
-        cycleNumber: profile.cycleNumber,
+        cycleNumber: aw.cycleNumber ?? profile.cycleNumber,
+        ...(isChestArms ? { programType, programDay: activeDay, dayLabel: dayLabel(programType, activeDay),
+          prescription: structuredClone(accessories),
+          workingSetsCompleted: accessories.filter(ex => !ex.optional).every(ex => Array.from({length: ex.sets}, (_, i) => `${ex.name}-${i}`)
+            .every(k => completedAccessory.has(k) && Number.isInteger(Number(aw.accReps[k])) && Number(aw.accReps[k]) >= (ex.repRangeMin ?? ex.reps))) } : {}),
         durationSeconds: duration,
         variant: currentVariant,
       },
@@ -635,6 +684,21 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         )}
       </div>
 
+      {isChestArms && (
+        <div className="bg-[#1c1c1e] rounded-xl p-4 text-sm space-y-2">
+          {validationMessage && <p role="alert" className="text-[var(--color-red)]">{validationMessage}</p>}
+          <p>Start at 2–3 RIR; progress toward 1–2. Good form, no failure required. About 60 minutes; rest is advisory.</p>
+          <p>Enter a conservative working weight manually. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
+          <p>You may alternate curl and triceps sets to save time; log each separately.</p>
+          {!aw.isActive && plan.filter(e => e.optional).map(ex => (
+            <label key={ex.id} className="flex items-center gap-2">
+              <input type="checkbox" checked={(aw.enabledOptional ?? []).includes(ex.id)} onChange={e => updateAW({
+                enabledOptional: e.target.checked ? [...(aw.enabledOptional ?? []), ex.id] : (aw.enabledOptional ?? []).filter(id => id !== ex.id)
+              })} /> Include optional {ex.name} ({ex.sets} sets)
+            </label>
+          ))}
+        </div>
+      )}
       {/* Rest Timer - sticky inline bar */}
       {aw.showRestTimer && aw.lastSetTime && (
         <RestTimer lastSetTime={aw.lastSetTime} />
@@ -747,9 +811,38 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             )}
             {ex.weightType === AccessoryWeightType.Bodyweight && bwDisplay == null && (
               <div className="text-xs text-[#8e8e93] -mt-1 mb-2">
-                Set your bodyweight in Settings to lock this to BW + added weight.
+                Enter TOTAL weight (bodyweight + added), or set your bodyweight in Settings for separate added-load entry.
               </div>
             )}
+            {isChestArms && (() => {
+              const guidance = workingSetGuidance(ex, activeDay, sessions, setLogs)
+              return <div className="text-xs text-[var(--color-accent)] mb-2 space-y-2">
+                <p>{ex.weightType === AccessoryWeightType.NoWeight || (ex.progressionType !== ProgressionType.Double && ex.progressionType !== ProgressionType.RepsThenLoad)
+                  ? 'Build controlled reps and range of motion; no automatic load increase.'
+                  : `Hit ${ex.sets}×${ex.repRangeMax ?? ex.reps} with good form and at least 1 RIR on every set in a completed session to consider +${workingWeightDisplay(ex.incrementLbs ?? 5, units)} ${units}. Otherwise keep the load.`}</p>
+                {guidance.canAdd && <p>Eligible next load: {workingWeightDisplay(guidance.suggestedWeight, units)} {units}{ex.weightType === AccessoryWeightType.Bodyweight ? ' total (BW + added)' : ''}. Optional: enter it manually when ready.</p>}
+                {aw.isActive && <label className="flex gap-2 items-center text-[#8e8e93]">
+                  <input type="checkbox" checked={aw.technique?.[ex.id] ?? false} onChange={e => updateAW({technique: {...aw.technique, [ex.id]: e.target.checked}})} /> Good form on every working set
+                </label>}
+                {ex.warmup && <div>
+                  <p>Warm-up ramp (separate from working sets). Adjust to your needs; round to available plates.</p>
+                  {[50, 70, 85].map((pct, i) => <div key={pct} className="flex flex-wrap items-center gap-2 py-2">
+                    <input type="checkbox" disabled={!aw.isActive} checked={(aw.warmups ?? []).includes(`${ex.id}-${i}`)}
+                      onChange={e => updateAW({
+                        warmups: e.target.checked ? [...(aw.warmups ?? []), `${ex.id}-${i}`] : (aw.warmups ?? []).filter(k => k !== `${ex.id}-${i}`),
+                        accWeights: {...aw.accWeights, [`warmup-${ex.id}-${i}`]: aw.accWeights[`warmup-${ex.id}-${i}`] ?? String(roundWeight((Number(aw.accWeights[`${ex.name}-0`]) || 0) * pct / 100, units))}
+                      })} />
+                    Warm-up {i + 1} ({pct}%)
+                    <input aria-label={`${ex.name} warm-up ${i + 1} weight`} type="number" min="0" step="0.5" className="w-16"
+                      disabled={!aw.isActive} value={aw.accWeights[`warmup-${ex.id}-${i}`] ?? (aw.isActive ? roundWeight((Number(aw.accWeights[`${ex.name}-0`]) || 0) * pct / 100, units) : '')}
+                      onChange={e => updateAW({accWeights: {...aw.accWeights, [`warmup-${ex.id}-${i}`]: e.target.value}})} /> {units} ×
+                    <input aria-label={`${ex.name} warm-up ${i + 1} reps`} type="number" min="1" className="w-12"
+                      disabled={!aw.isActive} value={aw.accReps[`warmup-${ex.id}-${i}`] ?? [5,3,2][i]}
+                      onChange={e => updateAW({accReps: {...aw.accReps, [`warmup-${ex.id}-${i}`]: e.target.value}})} /> reps
+                  </div>)}
+                </div>}
+              </div>
+            })()}
             {suggestion && (
               <div className="text-xs text-[var(--color-accent)] mb-2">{suggestion.message}</div>
             )}
@@ -804,7 +897,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                           />
                         )
                       ) : (
-                        accWeight > 0 ? <span className="text-base text-[#8e8e93]">{units === 'kg' ? Math.round(accWeight) : Math.round(accWeight * 2) / 2} {units}</span> : null
+                        accWeight > 0 ? <span className="text-base text-[#8e8e93]">{isChestArms ? accWeight : units === 'kg' ? Math.round(accWeight) : Math.round(accWeight * 2) / 2} {units}</span> : null
                       )
                     )}
 
@@ -825,6 +918,16 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                       </span>
                     )}
                   </div>
+                  {isChestArms && aw.isActive && (
+                    <label className="ml-10 mt-2 flex items-center gap-2 text-xs text-[#8e8e93]">
+                      RIR (optional)
+                      <select aria-label={`${ex.name} set ${si + 1} RIR`} value={aw.accRir?.[key] ?? ''}
+                        onChange={e => updateAW({accRir: {...aw.accRir, [key]: e.target.value === '' ? null : Number(e.target.value)}})}>
+                        <option value="">Unlogged</option>
+                        {[0,1,2,3].map(r => <option key={r} value={r}>{r === 3 ? '3+' : r}</option>)}
+                      </select>
+                    </label>
+                  )}
                   {ex.weightType === AccessoryWeightType.Barbell && accWeight > barbellWeight(units) && (
                     <div className="ml-10 mt-1">
                       <PlateBreakdown weight={accWeight} units={units} />

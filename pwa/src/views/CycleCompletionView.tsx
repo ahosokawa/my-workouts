@@ -1,10 +1,11 @@
+import ProgramPicker from '../components/ProgramPicker'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, liftDisplayName, liftProgressionAmount, ProgramVariant, PhaseType, ProgramType, DeloadType, displayRound, toStorageLbs, toDisplayWeight } from '../types'
 import type { ProgramType as ProgramTypeT, AccessoryExercise, SupplementalOverride, UserProfile } from '../types'
 import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
-import { PROGRAMS, getProgram, mainLiftForDay, usesTopSetEngine, programLabel, programDescription, getProgramAccessories } from '../logic/programs'
+import { getProgram, mainLiftForDay, usesTopSetEngine, getProgramAccessories } from '../logic/programs'
 import { deloadSuggestion } from '../logic/deloadTriggers'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
@@ -200,10 +201,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
 
     const bw = Number(bodyWeight)
     updateProfile({
-      squatTM: sq,
-      benchTM: bp,
-      deadliftTM: dl,
-      pressTM: sp,
+      ...(selectedProgramType === ProgramType.ChestArms ? {} : {squatTM: sq, benchTM: bp, deadliftTM: dl, pressTM: sp}),
       // Top-set-engine programs use a fixed day order (set by switchProgram); only 5/3/1
       // takes the editable day order from the DayOrderEditor.
       ...(selectedIsTopSetProgram ? {} : { dayOrder }),
@@ -222,7 +220,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
     }
     applyTMsAndAccessories()
 
-    if (deloadOption === 'skip') {
+    if (deloadOption === 'skip' || (selectedProgramType === ProgramType.ChestArms && deloadOption === 'tm_test')) {
       startNewCycle(selectedVariant)
     } else {
       // Save the selected variant for after deload
@@ -237,7 +235,9 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold mb-1">Cycle {profile.cycleNumber} Complete</h1>
         <p className="text-sm text-[#8e8e93]">
-          {isTopSetProgram
+          {programType === ProgramType.ChestArms
+            ? 'Review your working sets and choose whether to take a reduced-volume week before the next block.'
+            : isTopSetProgram
             ? 'Review top-set progress, adjust TMs, and decide on a deload before the next block.'
             : cycleResult.isSuccessful
               ? 'All AMRAP targets met! Training maxes will increase.'
@@ -246,7 +246,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       </div>
 
       {/* Lift-by-lift results */}
-      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
+      {programType !== ProgramType.ChestArms && <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">
             {isTopSetProgram ? 'Top-Set Progress' : 'Results'}
@@ -312,6 +312,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
         </div>
       </div>
 
+      }
       {/* Body Weight */}
       <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
@@ -345,25 +346,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
         </div>
         <div className="px-4 pb-3">
           <div className="grid grid-cols-1 gap-2 mb-3">
-            {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => {
-              const isSelected = selectedProgramType === p
-              return (
-                <button
-                  key={p}
-                  onClick={() => setSelectedProgramType(p)}
-                  className={`rounded-lg p-3 text-left transition-colors ${
-                    isSelected
-                      ? 'border-2 border-[var(--color-accent)] bg-[#2c2c2e]'
-                      : 'border border-[#38383a] bg-[#1c1c1e]'
-                  }`}
-                >
-                  <div className="font-semibold text-sm">{programLabel(p)}</div>
-                  <div className="text-xs text-[#8e8e93] mt-1">
-                    {programDescription(p)}
-                  </div>
-                </button>
-              )
-            })}
+            <ProgramPicker value={selectedProgramType} onChange={setSelectedProgramType} />
           </div>
           {!selectedIsTopSetProgram && (
             <>
@@ -420,7 +403,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
       </div>
 
       {/* New Training Maxes */}
-      <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
+      {selectedProgramType !== ProgramType.ChestArms && <div className="bg-[#1c1c1e] rounded-xl overflow-hidden mb-4">
         <div className="px-4 pt-3 pb-1">
           <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">New Training Maxes</h2>
         </div>
@@ -464,6 +447,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
         </div>
       </div>
 
+      }
       {/* Workout Day Order for the next cycle (5/3/1 only) */}
       {!selectedIsTopSetProgram && (
         <div className="mb-4">
@@ -505,7 +489,9 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
               {
                 value: 'deload' as const,
                 label: 'Deload',
-                desc: selectedIsTopSetProgram
+                desc: selectedProgramType === ProgramType.ChestArms
+                  ? 'Half-volume movement guide; working weights remain your choice'
+                  : selectedIsTopSetProgram
                   ? '3×3 at 60% TM, accessories at half volume (recommended)'
                   : 'Light sets at 40-60% TM (recommended)',
               },
@@ -517,7 +503,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
                   : 'Work up to TM for 1 rep per lift',
               },
               { value: 'skip' as const, label: 'Skip', desc: 'Go straight to next cycle' },
-            ]).map((opt) => (
+            ]).filter(opt => selectedProgramType !== ProgramType.ChestArms || opt.value !== 'tm_test').map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setDeloadOption(opt.value)}

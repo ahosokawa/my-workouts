@@ -48,7 +48,7 @@ describe('golden parity with legacy dispatchers', () => {
 
   it('programLabel', () => {
     expect(programLabel(ProgramType.FiveThreeOne)).toBe('5/3/1')
-    expect(programLabel(ProgramType.UpperLower)).toBe('4-Day Upper/Lower')
+    expect(programLabel(ProgramType.UpperLower)).toBe('Upper/Lower — Top Set')
   })
 
   it('dayHasTopSetMain for every program × day', () => {

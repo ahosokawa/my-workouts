@@ -1,9 +1,10 @@
+import ProgramPicker from '../components/ProgramPicker'
 import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../store'
 import { MainLift, MAIN_LIFTS, ProgramType, liftDisplayName, liftFromDay, isCycleStart, DEFAULT_DAY_ORDER, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { ProgramType as ProgramTypeT } from '../types'
 import { roundWeight } from '../logic/calculator'
-import { PROGRAMS, usesTopSetEngine, dayLabel, programLabel } from '../logic/programs'
+import { usesTopSetEngine, dayLabel, programLabel } from '../logic/programs'
 import { DEFAULT_DELOAD_CADENCE_WEEKS } from '../logic/deloadTriggers'
 import DayOrderEditor from '../components/DayOrderEditor'
 import { requestNotificationPermission } from '../notifications'
@@ -301,29 +302,10 @@ export default function SettingsView() {
 
       {/* Program */}
       <Section title="Program">
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm">Training Program</span>
-          <div className="flex flex-wrap gap-1 justify-end">
-            {(Object.keys(PROGRAMS) as ProgramTypeT[]).map((p) => (
-              <button
-                key={p}
-                disabled={workoutActive}
-                onClick={() => {
-                  if (workoutActive) return
-                  if (p === (profile.programType ?? ProgramType.FiveThreeOne)) return
-                  setPendingProgram(p)
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50 ${
-                  (profile.programType ?? ProgramType.FiveThreeOne) === p
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : 'bg-[#38383a] text-[#8e8e93]'
-                }`}
-              >
-                {PROGRAMS[p].shortLabel}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ProgramPicker compact value={profile.programType ?? ProgramType.FiveThreeOne}
+          disabled={workoutActive} onChange={(program) => {
+            if (!workoutActive && program !== (profile.programType ?? ProgramType.FiveThreeOne)) setPendingProgram(program)
+          }} />
         {workoutActive && (
           <p className="text-xs text-[#8e8e93] pb-2">Finish your active workout before switching programs.</p>
         )}
