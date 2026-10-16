@@ -5,6 +5,7 @@ import { barbellWeight } from '../logic/plates'
 import PlateBreakdown from './PlateBreakdown'
 
 interface MainSetCardProps {
+  inputLabel?: string
   set: PrescribedSet
   isActive: boolean
   isCompleted: boolean
@@ -25,7 +26,7 @@ interface MainSetCardProps {
 }
 
 export default function MainSetCard({
-  set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
+  inputLabel, set, isActive, isCompleted, amrapReps, setAmrapReps, bestE1RM, minRepsToBeat,
   overrideWeight, overrideReps, onWeightChange, onRepsChange, onToggle, units = 'lbs',
   showPlates = true, showPercentage = true,
 }: MainSetCardProps) {
@@ -93,6 +94,7 @@ export default function MainSetCard({
           {editingField === 'weight' ? (
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
               <input
+                aria-label={inputLabel ? `${inputLabel} weight` : undefined}
                 ref={weightRef}
                 type="number"
                 inputMode="decimal"
@@ -119,6 +121,7 @@ export default function MainSetCard({
         {!set.isAMRAP && editingField === 'reps' ? (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <input
+              aria-label={inputLabel ? `${inputLabel} reps` : undefined}
               ref={repsRef}
               type="number"
               inputMode="numeric"

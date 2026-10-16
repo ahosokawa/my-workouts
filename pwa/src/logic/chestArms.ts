@@ -1,5 +1,7 @@
+import { roundWeight } from './calculator'
+import { barbellWeight } from './plates'
 import { AccessoryWeightType as W, MainLift as M, ProgressionType as P } from '../types'
-import { toDisplayWeight } from '../types'
+import { toStorageLbs, liftDisplayName, trainingMaxFor, toDisplayWeight } from '../types'
 import type { Units, AccessoryExercise, SetLog, WorkoutSession } from '../types'
 
 // Reuse existing movement identities where available; primary lifts now use the
@@ -58,7 +60,7 @@ export function workingSetGuidance(ex: AccessoryExercise, day: number,
   const eligible = !!session?.workingSetsCompleted && sets.length === ex.sets &&
     sets.every((l, i) => l.setIndex === i && l.isCompleted && l.weight === weight &&
       l.weightType === ex.weightType && l.actualReps != null && Number.isInteger(l.actualReps) &&
-      l.actualReps >= (ex.repRangeMax ?? ex.reps) && l.techniqueConfirmed && l.rir != null && l.rir >= 1)
+      l.actualReps >= (ex.repRangeMax ?? ex.reps) && l.rir != null && l.rir >= 1)
   const increment = ex.incrementLbs != null && Number.isFinite(ex.incrementLbs) && ex.incrementLbs > 0 ? ex.incrementLbs : 5
   const canAdd = eligible && (ex.progressionType === P.Double || ex.progressionType === P.RepsThenLoad) && ex.weightType !== W.NoWeight
   return { weight, suggestedWeight: canAdd ? weight + increment : weight, canAdd }
@@ -67,4 +69,36 @@ export function workingSetGuidance(ex: AccessoryExercise, day: number,
 /** Keep fractional kg loads/increments in the new program without changing legacy display rounding. */
 export function workingWeightDisplay(lbs: number, units: Units): number {
   return Math.round(toDisplayWeight(lbs, units) * 100) / 100
+}
+
+/** Starting suggestions only: never treat a historical top set as repeatable
+ * straight-set work, and never borrow loads from differently named variants. */
+export function startingWorkingWeight(ex: AccessoryExercise, logs: SetLog[],
+  profile: import('../types').UserProfile): { weight: number; source: string } {
+  if (ex.weightType === W.NoWeight) return { weight: 0, source: '' }
+  const recent = logs.filter(l => l.exerciseName === ex.name && l.isCompleted && !l.isWarmup &&
+    Number.isFinite(l.weight) && l.weight > 0 && (l.weightType == null || l.weightType === ex.weightType) &&
+    (!l.isMainLift || l.isAMRAP) && (l.actualReps ?? l.targetReps) > 0)
+    .sort((a,b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
+  const latest = recent[0]
+  const units = profile.units ?? 'lbs'
+  const roundDown = (lbs: number) => {
+    const step = units === 'kg' ? 1 : 2.5
+    return toStorageLbs(Math.floor(toDisplayWeight(lbs, units) / step) * step, units)
+  }
+  if (ex.weightType === W.Bodyweight) {
+    return {weight: Math.max(profile.bodyWeightLbs ?? 0, latest?.weight ?? 0), source: 'Bodyweight / recent total load; edit added weight as needed.'}
+  }
+  if (latest) {
+    if (latest.isMainLift) return {weight: roundDown(latest.weight * 0.9), source: 'Starting suggestion: 90% of your recent top-set load. Adjust for repeated working sets.'}
+    const sameSession = recent.filter(l => l.sessionId === latest.sessionId)
+    return {weight: Math.min(...sameSession.map(l => l.weight)), source: 'Starting suggestion from your recent logged working sets. Adjust for this rep range.'}
+  }
+  const lift = ([M.Squat,M.BenchPress,M.Deadlift,M.ShoulderPress] as const).find(l => liftDisplayName(l) === ex.name)
+  if (lift) return {weight: roundDown(trainingMaxFor(profile,lift) * 0.75), source: 'Starting estimate: 75% of training max; adjust to leave 2–3 reps in reserve.'}
+  return {weight: 0, source: 'No matching load history. Enter a starting weight.'}
+}
+
+export function workingWarmupWeight(workingDisplay: number, fraction: number, units: Units) {
+  return Math.max(barbellWeight(units), roundWeight(workingDisplay * fraction, units))
 }

@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
 import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
 import type { AccessoryExercise, MainLift, UserProfile } from '../types'
-import { prescribedSets, amrapMinimum, roundWeight } from '../logic/calculator'
+import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
-import { workingSetGuidance, workingWeightDisplay } from '../logic/chestArms'
+import { workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from '../logic/chestArms'
 import { getProgram, slotForDay, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
@@ -172,7 +172,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     (ex: AccessoryExercise): string => {
       const isBW = ex.weightType === AccessoryWeightType.Bodyweight
       if (isChestArms) {
-        const prior = workingSetGuidance(ex, activeDay, sessions, setLogs).weight
+        const prior = workingSetGuidance(ex, activeDay, sessions, setLogs).weight || startingWorkingWeight(ex, setLogs, {...profile, units}).weight
         if (isBW) return String(bwDisplay != null ? Math.max(workingWeightDisplay(prior, units), bwDisplay) : workingWeightDisplay(prior, units))
         return prior > 0 ? String(workingWeightDisplay(prior, units)) : ''
       }
@@ -304,6 +304,15 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         if (isBW && bwDisplay != null && added > 0) a[key] = String(added)
       }
     }
+    if (isChestArms) {
+      for (const ex of accessories.filter(e => e.warmup)) {
+        for (let i=0;i<3;i++) {
+          const key = `warmup-${ex.id}-${i}`
+          w[key] = String(workingWarmupWeight(Number(w[`${ex.name}-0`]) || 0, [0.5,0.7,0.85][i], units))
+          r[key] = String([5,3,2][i])
+        }
+      }
+    }
     setCollapsedSections(new Set())
     setTopSetRir(null)
     // Default top-set reps: bottom of range for hypertrophy, AMRAP minimum for 5/3/1.
@@ -313,7 +322,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     updateAW({
       isActive: true,
       ...(isChestArms ? { prescription: structuredClone(accessories), programType, units, cycleNumber: profile.cycleNumber,
-        bodyWeightLbs: profile.bodyWeightLbs, accRir: {}, technique: {}, warmups: [] } : {}),
+        bodyWeightLbs: profile.bodyWeightLbs, accRir: {}, warmups: [], warmupOverrides: [] } : {}),
       startTime: Date.now(),
       day: profile.currentDay,
       liftRawValue: lift ?? 0,
@@ -397,6 +406,14 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     for (let i = 0; i < exercise.sets; i++) {
       const k = `${exercise.name}-${i}`
       if (k !== key && !completedAccessory.has(k)) next[k] = value
+    }
+    if (isChestArms && exercise.warmup) {
+      for (let i=0;i<3;i++) {
+        const warmKey = `warmup-${exercise.id}-${i}`
+        if (!(aw.warmups ?? []).includes(`${exercise.id}-${i}`) && !(aw.warmupOverrides ?? []).includes(warmKey)) {
+          next[warmKey] = String(workingWarmupWeight(Number(value) || 0,[0.5,0.7,0.85][i],units))
+        }
+      }
     }
     updateAW({ accWeights: next })
   }
@@ -509,7 +526,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           actualReps: isChestArms && completed ? Number(aw.accReps[key]) : null,
           ...(isChestArms ? { exerciseId: ex.id, weightType: ex.weightType,
             repRangeMin: ex.repRangeMin, repRangeMax: ex.repRangeMax,
-            rir: aw.accRir?.[key] ?? null, techniqueConfirmed: aw.technique?.[ex.id] ?? false } : {}),
+            rir: aw.accRir?.[key] ?? null } : {}),
           isAMRAP: false,
           isCompleted: completed,
           completedAt: completed ? new Date().toISOString() : null,
@@ -523,7 +540,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           const markedComplete = (aw.warmups ?? []).includes(`${ex.id}-${i}`)
           const key = `warmup-${ex.id}-${i}`
           const workingWeight = Number(aw.accWeights[`${ex.name}-0`]) || 0
-          const weight = Number(aw.accWeights[key] ?? roundWeight(workingWeight * [0.5, 0.7, 0.85][i], units))
+          const weight = Number(aw.accWeights[key] ?? workingWarmupWeight(workingWeight, [0.5, 0.7, 0.85][i], units))
           const reps = Number(aw.accReps[key] ?? [5, 3, 2][i])
           const valid = Number.isFinite(weight) && weight >= 0 && Number.isInteger(reps) && reps > 0
           const completed = markedComplete && valid
@@ -688,14 +705,17 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         <div className="bg-[#1c1c1e] rounded-xl p-4 text-sm space-y-2">
           {validationMessage && <p role="alert" className="text-[var(--color-red)]">{validationMessage}</p>}
           <p>Start at 2–3 RIR; progress toward 1–2. Good form, no failure required. About 60 minutes; rest is advisory.</p>
-          <p>Enter a conservative working weight manually. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
+          <p>Suggested starting weights are editable; adjust to leave 2–3 reps in reserve. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
           <p>You may alternate curl and triceps sets to save time; log each separately.</p>
           {!aw.isActive && plan.filter(e => e.optional).map(ex => (
-            <label key={ex.id} className="flex items-center gap-2">
-              <input type="checkbox" checked={(aw.enabledOptional ?? []).includes(ex.id)} onChange={e => updateAW({
-                enabledOptional: e.target.checked ? [...(aw.enabledOptional ?? []), ex.id] : (aw.enabledOptional ?? []).filter(id => id !== ex.id)
-              })} /> Include optional {ex.name} ({ex.sets} sets)
-            </label>
+            <button key={ex.id} role="switch" aria-checked={(aw.enabledOptional ?? []).includes(ex.id)}
+              onClick={() => updateAW({enabledOptional:(aw.enabledOptional ?? []).includes(ex.id) ? (aw.enabledOptional ?? []).filter(id => id !== ex.id) : [...(aw.enabledOptional ?? []),ex.id]})}
+              className="w-full flex items-center justify-between gap-3 py-2 text-left">
+              <span>Include optional {ex.name} ({ex.sets} sets)</span>
+              <span className={`w-11 h-6 rounded-full p-0.5 shrink-0 ${(aw.enabledOptional ?? []).includes(ex.id) ? 'bg-[var(--color-green)]' : 'bg-[#38383a]'}`}>
+                <span className={`block bg-white rounded-full w-5 h-5 transition-transform ${(aw.enabledOptional ?? []).includes(ex.id) ? 'translate-x-5' : ''}`} />
+              </span>
+            </button>
           ))}
         </div>
       )}
@@ -821,31 +841,34 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                   ? 'Build controlled reps and range of motion; no automatic load increase.'
                   : `Hit ${ex.sets}×${ex.repRangeMax ?? ex.reps} with good form and at least 1 RIR on every set in a completed session to consider +${workingWeightDisplay(ex.incrementLbs ?? 5, units)} ${units}. Otherwise keep the load.`}</p>
                 {guidance.canAdd && <p>Eligible next load: {workingWeightDisplay(guidance.suggestedWeight, units)} {units}{ex.weightType === AccessoryWeightType.Bodyweight ? ' total (BW + added)' : ''}. Optional: enter it manually when ready.</p>}
-                {aw.isActive && <label className="flex gap-2 items-center text-[#8e8e93]">
-                  <input type="checkbox" checked={aw.technique?.[ex.id] ?? false} onChange={e => updateAW({technique: {...aw.technique, [ex.id]: e.target.checked}})} /> Good form on every working set
-                </label>}
-                {ex.warmup && <div>
-                  <p>Warm-up ramp (separate from working sets). Adjust to your needs; round to available plates.</p>
-                  {[50, 70, 85].map((pct, i) => <div key={pct} className="flex flex-wrap items-center gap-2 py-2">
-                    <input type="checkbox" disabled={!aw.isActive} checked={(aw.warmups ?? []).includes(`${ex.id}-${i}`)}
-                      onChange={e => updateAW({
-                        warmups: e.target.checked ? [...(aw.warmups ?? []), `${ex.id}-${i}`] : (aw.warmups ?? []).filter(k => k !== `${ex.id}-${i}`),
-                        accWeights: {...aw.accWeights, [`warmup-${ex.id}-${i}`]: aw.accWeights[`warmup-${ex.id}-${i}`] ?? String(roundWeight((Number(aw.accWeights[`${ex.name}-0`]) || 0) * pct / 100, units))}
-                      })} />
-                    Warm-up {i + 1} ({pct}%)
-                    <input aria-label={`${ex.name} warm-up ${i + 1} weight`} type="number" min="0" step="0.5" className="w-16"
-                      disabled={!aw.isActive} value={aw.accWeights[`warmup-${ex.id}-${i}`] ?? (aw.isActive ? roundWeight((Number(aw.accWeights[`${ex.name}-0`]) || 0) * pct / 100, units) : '')}
-                      onChange={e => updateAW({accWeights: {...aw.accWeights, [`warmup-${ex.id}-${i}`]: e.target.value}})} /> {units} ×
-                    <input aria-label={`${ex.name} warm-up ${i + 1} reps`} type="number" min="1" className="w-12"
-                      disabled={!aw.isActive} value={aw.accReps[`warmup-${ex.id}-${i}`] ?? [5,3,2][i]}
-                      onChange={e => updateAW({accReps: {...aw.accReps, [`warmup-${ex.id}-${i}`]: e.target.value}})} /> reps
-                  </div>)}
-                </div>}
               </div>
             })()}
             {suggestion && (
               <div className="text-xs text-[var(--color-accent)] mb-2">{suggestion.message}</div>
             )}
+            {isChestArms && !workingSetGuidance(ex, activeDay, sessions, setLogs).weight && (
+              <p className="text-xs text-[#8e8e93] mb-2">{startingWorkingWeight(ex, setLogs, {...profile, units}).source}</p>
+            )}
+            {isChestArms && ex.warmup && <div role="group" aria-label={`${ex.name} warmups`}>
+              {[0.5,0.7,0.85].map((fraction,i) => {
+                const key = `warmup-${ex.id}-${i}`
+                const weight = workingWarmupWeight(Number(aw.accWeights[`${ex.name}-0`] ?? defaultWeight(ex)) || 0, fraction, units)
+                const completed = (aw.warmups ?? []).includes(`${ex.id}-${i}`)
+                return <MainSetCard key={key} inputLabel={`${ex.name} warm-up ${i+1}`}
+                  set={{id:key,setNumber:i+1,percentage:fraction,targetReps:[5,3,2][i],isWarmup:true,isAMRAP:false,isSupplemental:false,weight:toStorageLbs(weight,units)}}
+                  isActive={aw.isActive} isCompleted={completed} units={units}
+                  amrapReps={0} setAmrapReps={() => {}} bestE1RM={null} minRepsToBeat={() => null}
+                  overrideWeight={aw.accWeights[key]} overrideReps={aw.accReps[key]}
+                  onWeightChange={value => updateAW({accWeights:{...aw.accWeights,[key]:value},warmupOverrides:[...(aw.warmupOverrides ?? []),key]})}
+                  onRepsChange={value => updateAW({accReps:{...aw.accReps,[key]:value}})}
+                  onToggle={() => {
+                    if (!aw.isActive) return
+                    updateAW({warmups:completed ? (aw.warmups ?? []).filter(k => k !== `${ex.id}-${i}`) : [...(aw.warmups ?? []),`${ex.id}-${i}`],
+                      accWeights:{...aw.accWeights,[key]:aw.accWeights[key] ?? String(weight)},
+                      lastSetTime:Date.now(),showRestTimer:!completed})
+                  }} />
+              })}
+            </div>}
             {Array.from({ length: ex.sets }, (_, si) => {
               const key = `${ex.name}-${si}`
               const completed = completedAccessory.has(key)

@@ -215,7 +215,7 @@ export default function OnboardingView() {
           <div className="bg-[#1c1c1e] rounded-xl p-4 text-xs text-[#8e8e93]">
             <div className="text-white text-sm font-semibold mb-1">{programLabel(selectedProgram)} notes</div>
             {selectedProgram === ProgramType.ChestArms ? (
-              <p>Choose working weights manually. Train Upper A → Lower A → Upper B → Lower B at 2–3 RIR initially. Complete every working set at the upper rep target with good form and logged RIR to see an optional increase suggestion. OHP is off unless enabled. Training maxes do not set this program’s working loads.</p>
+              <p>Review editable starting suggestions from history or a conservative training-max estimate. Train Upper A → Lower A → Upper B → Lower B at 2–3 RIR initially. Complete every working set at the upper rep target with good form and logged RIR to see an optional increase suggestion. OHP is off unless enabled. Training maxes are only a fallback for starting weights, not the progression method.</p>
             ) : <>
             Training maxes are computed at 85% of 1RM. Top set is autoregulated by RPE (cap at RPE 8 / 2 RIR).
             Accessories run on double progression — when all sets hit the top of the range, the suggested weight bumps up.

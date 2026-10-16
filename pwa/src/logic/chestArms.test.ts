@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, workingWeightDisplay } from './chestArms'
+import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from './chestArms'
 import { getProgram, seedProgram, programMainLiftForDay } from './programs'
 import { getUpcomingWorkouts } from './upcomingWorkouts'
 import { ProgramType, MainLift, toStorageLbs } from '../types'
@@ -11,6 +11,7 @@ import { bestAmrapE1RM } from './personalRecords'
 import { buildAnalysisFiles } from './analysis'
 import legacy from '../../test-fixtures/multi-cycle-with-prs.json'
 import handoff from '../../test-fixtures/handoff-history.json'
+import type { UserProfile } from '../types'
 import older from '../../test-fixtures/legacy-sessions-no-variant.json'
 
 const bench = plan[MainLift.BenchPress][0]
@@ -62,13 +63,12 @@ describe('strict optional double progression', () => {
     expect(result.weight).toBe(135)
     expect(result.suggestedWeight).toBe(reps.every(r => r === 8) ? 140 : 135)
   })
-  it.each(['missing', 'uncompleted', 'effort', 'unlogged', 'technique', 'mixedLoad', 'variant', 'failedSession', 'warmup', 'invalidReps'])('holds for %s', reason => {
+  it.each(['missing', 'uncompleted', 'effort', 'unlogged', 'mixedLoad', 'variant', 'failedSession', 'warmup', 'invalidReps'])('holds for %s', reason => {
     const {session,logs} = history()
     if (reason === 'missing') logs.pop()
     if (reason === 'uncompleted') logs[2].isCompleted = false
     if (reason === 'effort') logs[2].rir = 0
     if (reason === 'unlogged') logs[2].rir = null
-    if (reason === 'technique') logs[2].techniqueConfirmed = false
     if (reason === 'mixedLoad') logs[2].weight = 140
     if (reason === 'variant') logs[2].exerciseId = 'other-bench'
     if (reason === 'failedSession') session.workingSetsCompleted = false
@@ -134,5 +134,35 @@ describe('history, backups and additive snapshots', () => {
     expect(restored.sessions).toEqual([session])
     expect(restored.setLogs).toEqual(logs)
     expect(restored.activeWorkout.isActive).toBe(false)
+  })
+})
+
+
+describe('starting suggestions and warmups', () => {
+  const profile = handoff.profile as UserProfile
+  it('uses a conservative recent top set instead of copying it as three sets', () => {
+    expect(startingWorkingWeight(bench,handoff.setLogs as SetLog[],profile)).toMatchObject({weight:130})
+  })
+  it('reuses recent accessory work by exact movement, excluding warmups and incomplete sets', () => {
+    const incline = plan[2][2]
+    const logs = [...handoff.setLogs as SetLog[], {...history().logs[0],exerciseName:incline.name,weight:999,isWarmup:true},
+      {...history().logs[0],exerciseName:incline.name,weight:800,isCompleted:false}]
+    expect(startingWorkingWeight(incline,logs,profile).weight).toBe(50)
+    expect(startingWorkingWeight({...incline,name:'Flat DB Bench Press'},logs,profile).weight).toBe(0)
+  })
+  it('falls back to a transparent conservative TM estimate for main lifts only', () => {
+    expect(startingWorkingWeight(bench,[],profile).weight).toBe(117.5)
+    expect(startingWorkingWeight(plan[2][4],[],profile).weight).toBe(0)
+  })
+  it('uses native display units and respects the empty bar for warmups', () => {
+    expect(workingWarmupWeight(135,0.5,'lbs')).toBe(67.5)
+    expect(workingWarmupWeight(60,0.5,'lbs')).toBe(45)
+    expect(workingWarmupWeight(25,0.5,'kg')).toBe(20)
+    expect(workingWeightDisplay(startingWorkingWeight(bench,[],{...profile,units:'kg'}).weight,'kg')).toBe(53)
+  })
+  it('does not require a technique checkbox for an otherwise valid progression', () => {
+    const {session,logs} = history()
+    logs.forEach(l => {delete l.techniqueConfirmed})
+    expect(workingSetGuidance(bench,1,[session],logs).canAdd).toBe(true)
   })
 })

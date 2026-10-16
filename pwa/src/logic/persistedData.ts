@@ -33,6 +33,7 @@ export interface ActiveWorkout {
   bodyWeightLbs?: number | null
   accRir?: Record<string, number | null>
   technique?: Record<string, boolean>
+  warmupOverrides?: string[]
   warmups?: string[]
   enabledOptional?: string[]
   isActive: boolean
