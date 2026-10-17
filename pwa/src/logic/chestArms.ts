@@ -1,3 +1,4 @@
+import { FIVE_THREE_ONE_ACCESSORIES, UPPER_LOWER_ACCESSORIES } from './accessories'
 import { roundWeight } from './calculator'
 import { barbellWeight } from './plates'
 import { AccessoryWeightType as W, MainLift as M, ProgressionType as P } from '../types'
@@ -12,6 +13,19 @@ function exercise(id: string, name: string, sets: number, min: number, max: numb
     weightType, progressionType: weightType === W.NoWeight ? P.RomStages : P.Double,
     incrementLbs: 5, notes, ...extra }
 }
+// Reuse catalog identities and band/reps-only tracking, changing only this
+// preset's prescriptions (never mutate another program's exercise objects).
+const BAND_PUSHDOWN: AccessoryExercise = {
+  ...UPPER_LOWER_ACCESSORIES[M.ShoulderPress].find(e => e.id === 'ul-band-pushdown')!,
+  reps: 12, repRangeMax: 20,
+}
+const OPTIONAL_FACE_PULL: AccessoryExercise = {
+  ...FIVE_THREE_ONE_ACCESSORIES[M.Deadlift].find(e => e.id === 'facepull')!,
+  sets: 2, reps: 15, repRangeMin: 15, repRangeMax: 20,
+  progressionType: P.RepsOnly, optional: true,
+  notes: 'Optional. Pull to face, elbows high; controlled reps. Rest 60–90 sec.',
+}
+
 export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
   [M.BenchPress]: [
     exercise('ca-bench', 'Bench Press', 3, 6, 8, W.Barbell, 'Rest 2–3 min.', { warmup: true }),
@@ -34,7 +48,8 @@ export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
     exercise('ul-incline-db', 'Incline DB Bench Press', 2, 10, 15, W.Standard, 'Or substitute Flat DB Bench Press in Settings. Weight per dumbbell.'),
     exercise('ul-lat-raise-b', 'DB Lateral Raise', 3, 12, 20, W.Standard, 'Rest 60–90 sec.', { incrementLbs: 2.5 }),
     exercise('ul-hammer', 'DB Hammer Curl', 3, 10, 15, W.Standard, 'Rest 60–90 sec.', { incrementLbs: 2.5 }),
-    exercise('ca-ez-triceps', 'Lying EZ-Bar Triceps Extension', 3, 10, 15, W.Standard, 'Total EZ-bar load. Rest 60–90 sec.', { incrementLbs: 2.5 }),
+    BAND_PUSHDOWN,
+    OPTIONAL_FACE_PULL,
     exercise('h-ohp', 'Overhead Press', 2, 6, 10, W.Barbell, 'Optional; skip to fit the hour. Rest 2 min.', { optional: true, warmup: true }),
   ],
   [M.Deadlift]: [
@@ -101,4 +116,19 @@ export function startingWorkingWeight(ex: AccessoryExercise, logs: SetLog[],
 
 export function workingWarmupWeight(workingDisplay: number, fraction: number, units: Units) {
   return Math.max(barbellWeight(units), roundWeight(workingDisplay * fraction, units))
+}
+
+/** Upgrade only saved hypertrophy plans still containing the previous default
+ * movement. The removed identity is the revision sentinel, so later user edits
+ * (including removing optional face pulls) survive reload without a new flag.
+ * Session snapshots/logs are never passed here or rewritten. */
+export function upgradeHypertrophyUpperB(plan: Record<number, AccessoryExercise[]>): Record<number, AccessoryExercise[]> {
+  const upperB = plan[M.ShoulderPress]
+  if (!upperB?.some(e => e.id === 'ca-ez-triceps' && e.name === 'Lying EZ-Bar Triceps Extension')) return plan
+  const hasPushdown = upperB.some(e => e.name === BAND_PUSHDOWN.name)
+  const hasFacePull = upperB.some(e => e.name.toLowerCase().replace(/[ -]/g, '') === 'bandfacepull')
+  const revised = upperB.flatMap(e => e.id === 'ca-ez-triceps' && e.name === 'Lying EZ-Bar Triceps Extension'
+    ? [...(hasPushdown ? [] : [{...BAND_PUSHDOWN}]), ...(hasFacePull ? [] : [{...OPTIONAL_FACE_PULL}])]
+    : [e])
+  return {...plan, [M.ShoulderPress]: revised}
 }

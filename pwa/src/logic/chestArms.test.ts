@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from './chestArms'
+import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight, upgradeHypertrophyUpperB } from './chestArms'
 import { getProgram, seedProgram, programMainLiftForDay } from './programs'
 import { getUpcomingWorkouts } from './upcomingWorkouts'
 import { ProgramType, MainLift, toStorageLbs } from '../types'
@@ -37,14 +37,14 @@ describe('Chest & Arms prescription', () => {
     const expected = [
       [[3,6,8],[3,6,10],[3,8,12],[2,8,12],[3,10,15],[3,10,15]],
       [[3,5,8],[3,8,10],[2,8,12],[3,12,20],[3,6,12]],
-      [[3,6,10],[3,8,12],[2,10,15],[3,12,20],[3,10,15],[3,10,15],[2,6,10]],
+      [[3,6,10],[3,8,12],[2,10,15],[3,12,20],[3,10,15],[3,12,20],[2,15,20],[2,6,10]],
       [[2,4,6],[3,6,10],[2,8,12],[3,12,20],[3,8,15]],
     ]
     seed.dayOrder.forEach((slot, i) => {
       expect(plan[slot].map(e => [e.sets,e.repRangeMin,e.repRangeMax])).toEqual(expected[i])
       expect(programMainLiftForDay(def, i+1)).toBeNull()
     })
-    expect(plan[4].filter(e => e.optional).map(e => e.name)).toEqual(['Overhead Press'])
+    expect(plan[4].filter(e => e.optional).map(e => e.name)).toEqual(['Band Face Pull', 'Overhead Press'])
     expect(plan[2][3].notes).toContain('per arm')
     expect(plan[1][2].notes).toContain('per leg')
   })
@@ -164,5 +164,70 @@ describe('starting suggestions and warmups', () => {
     const {session,logs} = history()
     logs.forEach(l => {delete l.techniqueConfirmed})
     expect(workingSetGuidance(bench,1,[session],logs).canAdd).toBe(true)
+  })
+})
+
+
+describe('Upper B band revision compatibility', () => {
+  function oldPlan() {
+    return {...structuredClone(plan), 4: [
+      ...structuredClone(plan[4].slice(0,5)),
+      {id:'ca-ez-triceps',name:'Lying EZ-Bar Triceps Extension',sets:3,reps:10,
+        repRangeMin:10,repRangeMax:15,weightType:'standard' as const},
+      structuredClone(plan[4].at(-1)!),
+    ]}
+  }
+  it('reuses existing band identities with reps-only tracking and optional face pulls', () => {
+    expect(plan[4][5]).toMatchObject({id:'ul-band-pushdown',name:'Band Triceps Pushdown',sets:3,
+      repRangeMin:12,repRangeMax:20,weightType:'noWeight',progressionType:'reps_only'})
+    expect(plan[4][6]).toMatchObject({id:'facepull',name:'Band Face Pull',sets:2,
+      repRangeMin:15,repRangeMax:20,weightType:'noWeight',progressionType:'reps_only',optional:true})
+  })
+  it('changes only the replaced row and inserts face pulls; is pure and idempotent', () => {
+    const original = oldPlan(), before = JSON.stringify(original)
+    const revised = upgradeHypertrophyUpperB(original)
+    expect(JSON.stringify(original)).toBe(before)
+    expect(revised[4]).toEqual(plan[4])
+    for (const slot of [1,2,3] as const) expect(revised[slot]).toBe(original[slot])
+    expect(upgradeHypertrophyUpperB(revised)).toBe(revised)
+    const withoutFace = {...revised,4:revised[4].filter(e => e.id !== 'facepull')}
+    expect(upgradeHypertrophyUpperB(withoutFace)).toBe(withoutFace)
+  })
+  it('preserves completed history, active snapshots, other programs, and progression evidence', () => {
+    const old = oldPlan(), {session,logs} = history()
+    const oldUpperB = {...session,id:'old-upper-b',programDay:3,dayLabel:'Upper B — Chest & Arms',prescription:structuredClone(old[4])}
+    const oldTriceps: SetLog = {...logs[0],id:'old-triceps',sessionId:oldUpperB.id,exerciseId:'ca-ez-triceps',
+      exerciseName:'Lying EZ-Bar Triceps Extension',weightType:'standard',weight:40,actualReps:15,repRangeMin:10,repRangeMax:15}
+    const state = {...emptyPersistedData(),_migratedUpperLowerPlan:true,profile:{...handoff.profile,programType:ProgramType.ChestArms} as UserProfile,
+      customAccessories:old,sessions:[session,oldUpperB],setLogs:[...logs,oldTriceps],
+      programAccessoryArchive:{[ProgramType.UpperLower]:structuredClone(old)},
+      activeWorkout:{...emptyPersistedData().activeWorkout,isActive:true,day:3,liftRawValue:0,prescription:structuredClone(old[4])}}
+    const before = JSON.stringify(state)
+    const normalized = normalizePersistedData(state as unknown as Record<string,unknown>)
+    expect(normalized.customAccessories?.[4]).toEqual(plan[4])
+    expect(normalized.sessions).toBe(state.sessions)
+    expect(normalized.setLogs).toBe(state.setLogs)
+    expect(normalized.activeWorkout).toEqual(state.activeWorkout)
+    expect(normalized.programAccessoryArchive).toEqual(state.programAccessoryArchive)
+    expect(workingSetGuidance(bench,1,normalized.sessions,normalized.setLogs).canAdd).toBe(true)
+    expect(JSON.stringify(state)).toBe(before)
+  })
+  it('upgrades an archived hypertrophy plan without changing the live other program', () => {
+    const live = oldPlan(), archived = oldPlan()
+    const state = {...emptyPersistedData(),_migratedUpperLowerPlan:true,profile:handoff.profile as UserProfile,customAccessories:live,
+      programAccessoryArchive:{[ProgramType.ChestArms]:archived}}
+    const normalized = normalizePersistedData(state as unknown as Record<string,unknown>)
+    expect(normalized.customAccessories).toEqual(live)
+    expect(normalized.programAccessoryArchive[ProgramType.ChestArms]?.[4]).toEqual(plan[4])
+  })
+  it('does not duplicate existing band rows or replace deliberate substitutions', () => {
+    const old = oldPlan()
+    old[4].push({...plan[4][5]}, {...plan[4][6], name:'Band Facepull'})
+    const upgraded = upgradeHypertrophyUpperB(old)
+    expect(upgraded[4].filter(e => e.id === 'ul-band-pushdown')).toHaveLength(1)
+    expect(upgraded[4].filter(e => e.id === 'facepull')).toHaveLength(1)
+    const customized = oldPlan()
+    customized[4][5].name='Custom Triceps Exercise'
+    expect(upgradeHypertrophyUpperB(customized)).toBe(customized)
   })
 })

@@ -20,6 +20,7 @@ import type {
 } from '../types'
 import { MAIN_LIFTS, ProgramType as PT, isValidDayOrder } from '../types'
 import { getProgramAccessories, mainLiftForDay } from './programs'
+import { upgradeHypertrophyUpperB } from './chestArms'
 
 // ============================================================
 // Active Workout State (survives tab switches)
@@ -258,6 +259,17 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
   }
   if (!state.programAccessoryArchive || typeof state.programAccessoryArchive !== 'object') state.programAccessoryArchive = {}
   if (!state.programSupplementalArchive || typeof state.programSupplementalArchive !== 'object') state.programSupplementalArchive = {}
+  // Additive Upper B revision, scoped to the hypertrophy style. An active
+  // session keeps its prescription snapshot; older unsnapshotted sessions wait.
+  if (state.profile?.programType === PT.ChestArms && state.customAccessories &&
+      (!state.activeWorkout.isActive || state.activeWorkout.prescription)) {
+    state.customAccessories = upgradeHypertrophyUpperB(state.customAccessories)
+  }
+  const hypertrophyArchive = state.programAccessoryArchive[PT.ChestArms]
+  if (hypertrophyArchive) {
+    state.programAccessoryArchive = {...state.programAccessoryArchive,
+      [PT.ChestArms]: upgradeHypertrophyUpperB(hypertrophyArchive)}
+  }
   if (!Array.isArray(state.savedExercises)) state.savedExercises = []
 
   // Normalize the exercise library to context-free ExerciseDef and union in any

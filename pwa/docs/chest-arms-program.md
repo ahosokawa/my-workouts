@@ -53,3 +53,10 @@ Focused unit tests cover program prescriptions, day slots, strict progression, i
 Verified on implementation: 364 unit tests passed, the full 53-test browser suite passed, and 13 focused browser checks passed after the final setup changes (including two additional mobile cases). A final five-test mobile suite also passed, including the new program’s cycle transition without TM increases. Production build, TypeScript checks and ESLint passed. Browser checks use Chromium at iPhone-sized dimensions; physical iOS/Safari testing remains manual.
 
 UI feedback update: removed the good-form checkbox and progression gate; optional OHP uses a switch, warmups reuse MainSetCard, and first-session suggestions use history before a conservative TM fallback. No saved workout or active input is migrated or overwritten. These defaults apply when starting a new session; existing in-progress values remain intact.
+
+
+## Upper B band accessory update
+
+Upper B now uses **Band Triceps Pushdown, 3×12–20**, in place of Lying EZ-Bar Triceps Extension. **Band Face Pull, 2×15–20**, is optional and off by default, immediately before optional OHP. Both reuse existing catalog identities and reps-only, no-weight band tracking.
+
+Existing live or archived hypertrophy plans still containing the old default triceps movement are updated on local hydration/import. This pure, idempotent compatibility update changes only Upper B's replacement row and inserts the optional face pull if absent. It preserves intentional exercise substitutions and avoids duplicate band movements. Removing optional face pulls later remains respected. Completed sessions, logs, exercise progression evidence, other programs and in-progress prescription snapshots are untouched. An older active session without a prescription snapshot defers its live-plan update until a later load. No new tracking UI or schema version is needed.

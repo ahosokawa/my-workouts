@@ -71,9 +71,12 @@ test('optional OHP is off, enabled explicitly, and bodyweight stores BW plus add
   await activate(page)
   await page.getByRole('button',{name:'Upper B',exact:true}).click()
   await expect(page.getByText('Include optional Overhead Press (2 sets)')).toBeVisible()
+  await expect(page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'})).not.toBeChecked()
   await page.getByRole('button',{name:'Start Workout'}).click()
   let current = await state(page)
   expect(current.activeWorkout.prescription).toHaveLength(6)
+  expect(current.activeWorkout.prescription[5]).toMatchObject({name:'Band Triceps Pushdown',sets:3,repRangeMin:12,repRangeMax:20})
+  expect(current.activeWorkout.prescription.some((e:{name:string})=>e.name==='Band Face Pull')).toBe(false)
   expect(current.activeWorkout.prescription.some((e:{name:string})=>e.name==='Overhead Press')).toBe(false)
   // Dips: existing convention is TOTAL BW + added; only added load is edited.
   await page.locator('input[placeholder="0"]').first().fill('10')
@@ -85,8 +88,10 @@ test('optional OHP is off, enabled explicitly, and bodyweight stores BW plus add
   await activate(page)
   await page.getByRole('button',{name:'Upper B',exact:true}).click()
   await page.getByText('Include optional Overhead Press (2 sets)').click()
+  await page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'}).click()
   await page.getByRole('button',{name:'Start Workout'}).click()
   current = await state(page)
+  expect(current.activeWorkout.prescription.at(-2)).toMatchObject({name:'Band Face Pull',sets:2,repRangeMin:15,repRangeMax:20})
   expect(current.activeWorkout.prescription.at(-1)).toMatchObject({name:'Overhead Press',sets:2,repRangeMin:6,repRangeMax:10})
 })
 
