@@ -156,7 +156,7 @@ test('new program cycle completion offers a reduced week or next cycle without T
   await expect(page.getByRole('heading',{name:/Cycle \d+ Complete/})).toBeVisible()
   await expect(page.getByRole('heading',{name:'Top-Set Progress'})).toHaveCount(0)
   await expect(page.getByRole('heading',{name:'New Training Maxes'})).toHaveCount(0)
-  await expect(page.getByText('Half-volume movement guide; working weights remain your choice')).toBeVisible()
+  await expect(page.getByText('Half the sets at ~80% of your usual load (recommended)')).toBeVisible()
   const before = await state(page)
   await page.getByRole('button',{name:'Skip Go straight to next cycle'}).click()
   await page.getByRole('button',{name:/^Start Cycle/}).click()

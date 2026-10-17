@@ -52,11 +52,12 @@ interface AppState {
   updateProfile: (partial: Partial<UserProfile>) => void
   recalculateTMs: () => void
   advanceDay: (finishedDay?: number) => boolean  // returns true if cycle completed
-  selectNextWorkoutDay: (day: number) => void  // pick any remaining day of the current week
+  selectNextWorkoutDay: (day: number) => void  // pick any remaining day of the current (or deload) week
   resetCycle: () => void  // back to Week 1 Day 1, discarding any in-progress workout
   startNewCycle: (variant?: ProgramVariant) => void
   startDeload: (deloadType: DeloadType) => void
-  advanceDeloadDay: () => void
+  advanceDeloadDay: (finishedDay?: number) => void  // ends the deload once all 4 days are done
+  endDeload: () => void  // finish the deload week now (early or after day 4) and start the next cycle
   switchProgram: (programType: ProgramType) => void
 
   // Workout actions
@@ -150,6 +151,7 @@ export const useStore = create<AppState>()(
           isDeloading: false,
           deloadType: null,
           deloadDay: 1,
+          deloadCompletedDays: [],
           bodyWeightLbs: null,
           bodyWeightLastUpdated: null,
           createdAt: new Date().toISOString(),
@@ -217,6 +219,11 @@ export const useStore = create<AppState>()(
         const { profile } = get()
         if (!profile) return
         // Only a day that's still pending this week can be selected as next.
+        if (profile.isDeloading) {
+          if (!remainingDays(profile.deloadCompletedDays ?? []).includes(day)) return
+          set({ profile: { ...profile, deloadDay: day } })
+          return
+        }
         if (!remainingDays(profile.completedDaysThisWeek ?? []).includes(day)) return
         set({ profile: { ...profile, currentDay: day } })
       },
@@ -274,6 +281,7 @@ export const useStore = create<AppState>()(
             isDeloading: false,
             deloadType: null,
             deloadDay: 1,
+            deloadCompletedDays: [],
           },
         })
       },
@@ -287,6 +295,7 @@ export const useStore = create<AppState>()(
             isDeloading: true,
             deloadType,
             deloadDay: 1,
+            deloadCompletedDays: [],
             isCycleComplete: false,
           },
           // A deload can now start mid-cycle (trigger banner) — a workout in
@@ -295,21 +304,32 @@ export const useStore = create<AppState>()(
         })
       },
 
-      advanceDeloadDay: () => {
+      advanceDeloadDay: (finishedDay) => {
         const { profile } = get()
         if (!profile || !profile.isDeloading) return
-        const nextDay = profile.deloadDay + 1
-        if (nextDay > 4) {
-          // Deload complete — stamp it (feeds the time-based deload trigger),
-          // then start the next cycle automatically. The variant was already
-          // saved to the profile before the deload started.
-          set({ profile: { ...profile, lastDeloadEndedAt: new Date().toISOString() } })
-          get().startNewCycle(profile.currentVariant)
+        // Deload days can be done in any order; the week ends once all 4 are done.
+        const prior = profile.deloadCompletedDays ?? []
+        const day = finishedDay ?? profile.deloadDay
+        const done = prior.includes(day) ? prior : [...prior, day].sort((a, b) => a - b)
+        const remaining = remainingDays(done)
+        if (remaining.length === 0) {
+          get().endDeload()
         } else {
-          set({
-            profile: { ...profile, deloadDay: nextDay },
-          })
+          set({ profile: { ...profile, deloadCompletedDays: done, deloadDay: remaining[0] } })
         }
+      },
+
+      endDeload: () => {
+        const { profile } = get()
+        if (!profile || !profile.isDeloading) return
+        // Stamp the end (feeds the time-based deload trigger), then start the next
+        // cycle. The variant was already saved to the profile before the deload
+        // started. Any unfinished deload workout is discarded with the week.
+        set({
+          profile: { ...profile, lastDeloadEndedAt: new Date().toISOString() },
+          activeWorkout: { ...EMPTY_ACTIVE_WORKOUT },
+        })
+        get().startNewCycle(profile.currentVariant)
       },
 
       switchProgram: (programType) => {
@@ -368,6 +388,7 @@ export const useStore = create<AppState>()(
             isDeloading: false,
             deloadType: null,
             deloadDay: 1,
+            deloadCompletedDays: [],
             hypertrophyTopSets: seed.hypertrophyTopSets,
           },
           customAccessories: nextAccessories,

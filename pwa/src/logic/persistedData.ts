@@ -16,6 +16,7 @@ import type {
   SupplementalOverride,
   ExerciseDef,
   CloudSyncConfig,
+  DeloadType,
   ProgramType,
 } from '../types'
 import { MAIN_LIFTS, ProgramType as PT, isValidDayOrder } from '../types'
@@ -37,6 +38,8 @@ export interface ActiveWorkout {
   warmupOverrides?: string[]
   warmups?: string[]
   enabledOptional?: string[]
+  // Pinned at startSession when the workout is a deload/TM-test day; absent = normal.
+  deloadType?: DeloadType | null
   isActive: boolean
   startTime: number | null
   // Identity of the workout in progress, pinned at startSession so a mid-session
@@ -319,6 +322,11 @@ export function normalizePersistedData(raw: Record<string, unknown>): PersistedD
     if (state.profile.isDeloading === undefined) updates.isDeloading = false
     if (state.profile.deloadType === undefined) updates.deloadType = null
     if (state.profile.deloadDay === undefined) updates.deloadDay = 1
+    if (state.profile.isDeloading && !Array.isArray(state.profile.deloadCompletedDays)) {
+      // Pre-feature deload days were strictly linear, so days before deloadDay are done.
+      const dd = state.profile.deloadDay ?? 1
+      updates.deloadCompletedDays = Array.from({ length: Math.max(0, dd - 1) }, (_, i) => i + 1)
+    }
     if (!state.profile.programType) updates.programType = PT.FiveThreeOne
     if (state.profile.cycleWeeks === undefined) updates.cycleWeeks = 3
     if (!isValidDayOrder(state.profile.dayOrder)) updates.dayOrder = [...MAIN_LIFTS]

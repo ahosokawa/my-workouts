@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { liftDisplayName, liftFromDay } from '../types'
+import { sessionWeekLabel } from '../logic/deload'
 
 export default function HistoryView() {
   const sessions = useStore((s) => s.sessions)
@@ -33,7 +34,7 @@ export default function HistoryView() {
           >
             <div>
               <div className="font-medium text-sm">
-                Week {s.week}: {s.dayLabel ?? (lift ? liftDisplayName(lift) : 'Unknown')}
+                {sessionWeekLabel(s)}: {s.dayLabel ?? (lift ? liftDisplayName(lift) : 'Unknown')}
               </div>
               <div className="text-xs text-[#8e8e93]">
                 {date.toLocaleDateString()} · Cycle {s.cycleNumber}

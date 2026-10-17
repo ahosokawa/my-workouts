@@ -3,7 +3,7 @@ import { useStore } from './store'
 import { emptyPersistedData, pickPersistedData, EMPTY_ACTIVE_WORKOUT } from './logic/persistedData'
 import type { ActiveWorkout } from './logic/persistedData'
 import type { UserProfile } from './types'
-import { ProgramType } from './types'
+import { DeloadType, ProgramType } from './types'
 
 const PROFILE: UserProfile = {
   squatOneRepMax: 300,
@@ -97,5 +97,55 @@ describe('resetAll', () => {
     useStore.getState().resetAll()
 
     expect(pickPersistedData(useStore.getState())).toEqual(emptyPersistedData())
+  })
+})
+
+describe('deload week', () => {
+  beforeEach(() => {
+    useStore.setState({ activeWorkout: { ...EMPTY_ACTIVE_WORKOUT } })
+    useStore.getState().startDeload(DeloadType.Deload)
+  })
+
+  it('startDeload begins with no days done', () => {
+    const p = useStore.getState().profile!
+    expect(p.isDeloading).toBe(true)
+    expect(p.deloadDay).toBe(1)
+    expect(p.deloadCompletedDays).toEqual([])
+  })
+
+  it('days can be picked and finished in any order', () => {
+    const s = useStore.getState()
+    s.selectNextWorkoutDay(3)
+    expect(useStore.getState().profile!.deloadDay).toBe(3)
+    useStore.getState().advanceDeloadDay(3)
+    let p = useStore.getState().profile!
+    expect(p.deloadCompletedDays).toEqual([3])
+    expect(p.deloadDay).toBe(1)
+    // A finished day can't be re-selected; the normal week position is untouched.
+    useStore.getState().selectNextWorkoutDay(3)
+    p = useStore.getState().profile!
+    expect(p.deloadDay).toBe(1)
+    expect(p.currentDay).toBe(PROFILE.currentDay)
+    expect(p.completedDaysThisWeek).toEqual(PROFILE.completedDaysThisWeek)
+  })
+
+  it('finishing all four days ends the deload and starts the next cycle', () => {
+    for (const d of [2, 4, 1, 3]) useStore.getState().advanceDeloadDay(d)
+    const p = useStore.getState().profile!
+    expect(p.isDeloading).toBe(false)
+    expect(p.cycleNumber).toBe(PROFILE.cycleNumber + 1)
+    expect(p.deloadCompletedDays).toEqual([])
+    expect(p.lastDeloadEndedAt).toBeTruthy()
+  })
+
+  it('endDeload ends early, discarding an unfinished deload workout', () => {
+    useStore.getState().advanceDeloadDay(1)
+    useStore.setState({ activeWorkout: { ...IN_FLIGHT, deloadType: DeloadType.Deload } })
+    useStore.getState().endDeload()
+    const st = useStore.getState()
+    expect(st.profile!.isDeloading).toBe(false)
+    expect(st.profile!.cycleNumber).toBe(PROFILE.cycleNumber + 1)
+    expect(st.profile!.lastDeloadEndedAt).toBeTruthy()
+    expect(st.activeWorkout.isActive).toBe(false)
   })
 })

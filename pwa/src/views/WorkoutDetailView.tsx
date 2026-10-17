@@ -5,6 +5,7 @@ import { barbellWeight } from '../logic/plates'
 import { programLabel } from '../logic/programs'
 import { workingWeightDisplay } from '../logic/chestArms'
 import { getVariantConfig } from '../logic/variants'
+import { sessionWeekLabel } from '../logic/deload'
 import PlateBreakdown from '../components/PlateBreakdown'
 
 export default function WorkoutDetailView() {
@@ -53,7 +54,7 @@ export default function WorkoutDetailView() {
       {/* Header */}
       <div className="bg-[#1c1c1e] rounded-xl p-4">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-bold">Week {session.week}: {session.dayLabel ?? (lift ? liftDisplayName(lift) : 'Unknown')}</h1>
+          <h1 className="text-lg font-bold">{sessionWeekLabel(session)}: {session.dayLabel ?? (lift ? liftDisplayName(lift) : 'Unknown')}</h1>
           <span className="text-xs px-1.5 py-0.5 rounded bg-[#2c2c2e] text-[#8e8e93]">
             {session.programType === 'upper_lower_chest_arms' ? programLabel(session.programType) : getVariantConfig(session.variant ?? 'fsl').shortLabel}
           </span>

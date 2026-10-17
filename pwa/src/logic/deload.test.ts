@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { topSetDeloadSets, scaleAccessoryVolume, deloadDayPlan } from './deload'
+import {
+  topSetDeloadSets, scaleAccessoryVolume, deloadDayPlan,
+  isDeloadSession, withoutDeload, sessionWeekLabel, deloadAccessoryWeight,
+} from './deload'
 import { deloadSets } from './calculator'
 import { getProgram } from './programs'
 import { DeloadType, MainLift, ProgramType, AccessoryWeightType } from '../types'
-import type { AccessoryExercise } from '../types'
+import type { AccessoryExercise, SetLog, WorkoutSession } from '../types'
 
 const ACCESSORIES: AccessoryExercise[] = [
   { id: 'a', name: 'Pull-Ups', weightType: AccessoryWeightType.Bodyweight, sets: 4, reps: 7 },
@@ -45,12 +48,12 @@ describe('scaleAccessoryVolume', () => {
 })
 
 describe('deloadDayPlan', () => {
-  it('5/3/1 keeps the percentage prescriptions and drops accessories', () => {
+  it('5/3/1 keeps the percentage prescriptions and halves accessories', () => {
     const def = getProgram(ProgramType.FiveThreeOne)
     const plan = deloadDayPlan(def, DeloadType.Deload, 1, { tmLbs: 300, accessories: ACCESSORIES })
     expect(plan.lift).toBe(MainLift.Squat)
     expect(plan.mainSets).toEqual(deloadSets(300, DeloadType.Deload))
-    expect(plan.accessories).toEqual([])
+    expect(plan.accessories.map((e) => e.sets)).toEqual([2, 2, 1])
     expect(plan.isRetestDay).toBe(false)
     // TM test path also unchanged
     const tmPlan = deloadDayPlan(def, DeloadType.TMTest, 1, { tmLbs: 300, accessories: ACCESSORIES })
@@ -97,5 +100,62 @@ describe('deloadDayPlan', () => {
       expect(plan.isRetestDay).toBe(false)
       expect(plan.accessories.map((e) => e.sets)).toEqual([2, 2, 1])
     }
+  })
+})
+
+const session = (id: string, week: number, extra: Partial<WorkoutSession> = {}): WorkoutSession => ({
+  id, date: '2026-10-01T12:00:00.000Z', liftRawValue: 1, week, cycleNumber: 1, durationSeconds: 0, ...extra,
+})
+const log = (id: string, sessionId: string): SetLog => ({
+  id, sessionId, exerciseName: 'Squat', isMainLift: true, setIndex: 0, weight: 200,
+  targetReps: 5, actualReps: 8, isAMRAP: true, isCompleted: true, completedAt: '2026-10-01T12:00:00.000Z',
+})
+
+describe('deload isolation', () => {
+  it('week 0 marks a deload session', () => {
+    expect(isDeloadSession({ week: 0 })).toBe(true)
+    expect(isDeloadSession({ week: 1 })).toBe(false)
+  })
+
+  it('withoutDeload drops deload sessions and their logs, keeps orphan logs', () => {
+    const sessions = [session('a', 1), session('d', 0, { deloadType: DeloadType.TMTest })]
+    const logs = [log('1', 'a'), log('2', 'd'), log('3', 'gone')]
+    const out = withoutDeload(sessions, logs)
+    expect(out.sessions.map((s) => s.id)).toEqual(['a'])
+    expect(out.setLogs.map((l) => l.id)).toEqual(['1', '3'])
+  })
+
+  it('withoutDeload returns inputs untouched when there is no deload', () => {
+    const sessions = [session('a', 2)]
+    const logs = [log('1', 'a')]
+    const out = withoutDeload(sessions, logs)
+    expect(out.sessions).toBe(sessions)
+    expect(out.setLogs).toBe(logs)
+  })
+
+  it('labels weeks, deloads and TM tests (legacy week-0 reads as Deload)', () => {
+    expect(sessionWeekLabel(session('a', 3))).toBe('Week 3')
+    expect(sessionWeekLabel(session('d', 0, { deloadType: DeloadType.Deload }))).toBe('Deload')
+    expect(sessionWeekLabel(session('t', 0, { deloadType: DeloadType.TMTest }))).toBe('TM Test')
+    expect(sessionWeekLabel(session('l', 0))).toBe('Deload')
+  })
+})
+
+describe('deloadAccessoryWeight', () => {
+  it('prefills ~80% rounded down to 2.5 lb / 1 kg', () => {
+    expect(deloadAccessoryWeight(50, 'lbs', null)).toBe(40)
+    expect(deloadAccessoryWeight(55, 'lbs', null)).toBe(42.5) // 44 → 42.5
+    expect(deloadAccessoryWeight(27, 'kg', null)).toBe(21) // 21.6 → 21
+  })
+
+  it('bodyweight totals keep bodyweight and scale only the added load', () => {
+    expect(deloadAccessoryWeight(205, 'lbs', 180)).toBe(200) // +25 → +20
+    expect(deloadAccessoryWeight(180, 'lbs', 180)).toBe(180)
+  })
+
+  it('leaves tiny or missing loads alone', () => {
+    expect(deloadAccessoryWeight(2.5, 'lbs', null)).toBe(2.5)
+    expect(deloadAccessoryWeight(0, 'lbs', null)).toBe(0)
+    expect(deloadAccessoryWeight(NaN, 'lbs', null)).toBe(0)
   })
 })

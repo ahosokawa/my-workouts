@@ -7,6 +7,7 @@ import { getProgram } from '../logic/programs'
 import { accessoryTagIndex, muscleGroupLabel } from '../logic/muscleGroups'
 import { weeklyVolume, sessionsPerWeek, consistencyStreakWeeks, stalledLifts } from '../logic/metrics'
 import { topSetLifts, weeksSinceLastDeload } from '../logic/deloadTriggers'
+import { withoutDeload } from '../logic/deload'
 
 const CONSISTENCY_WEEKS = 8
 
@@ -19,10 +20,13 @@ export default function TrendsView({ profile }: { profile: UserProfile }) {
   const units = profile.units ?? 'lbs'
   const def = getProgram(profile.programType)
   const now = useMemo(() => new Date(), [])
+  // Deload weeks keep the consistency streak alive (all sessions) but stay out
+  // of muscle-group volume and stall detection.
+  const trainingLogs = useMemo(() => withoutDeload(sessions, setLogs).setLogs, [sessions, setLogs])
 
   const volume = useMemo(
-    () => weeklyVolume(setLogs, 2, now, accessoryTagIndex(customAccessories)),
-    [setLogs, now, customAccessories],
+    () => weeklyVolume(trainingLogs, 2, now, accessoryTagIndex(customAccessories)),
+    [trainingLogs, now, customAccessories],
   )
   const [lastWeek, thisWeek] = volume
   const groupsWithVolume = MUSCLE_GROUPS.filter(
@@ -41,8 +45,8 @@ export default function TrendsView({ profile }: { profile: UserProfile }) {
   )
 
   const stalled = useMemo(
-    () => stalledLifts(setLogs, topSetLifts(def).length > 0 ? topSetLifts(def) : [1, 2, 3, 4], now),
-    [setLogs, def, now],
+    () => stalledLifts(trainingLogs, topSetLifts(def).length > 0 ? topSetLifts(def) : [1, 2, 3, 4], now),
+    [trainingLogs, def, now],
   )
   const deloadWeeks = weeksSinceLastDeload(profile, now)
 

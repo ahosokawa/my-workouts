@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, AccessoryWeightType, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound } from '../types'
-import type { AccessoryExercise, MainLift, UserProfile } from '../types'
+import { liftDisplayName, AccessoryWeightType, DeloadType as DT, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound, trainingMaxField } from '../types'
+import type { AccessoryExercise, DeloadType, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
@@ -12,6 +12,9 @@ import {
   recentMainLiftTopSets, lastAccessorySession,
 } from '../logic/progression'
 import { estimated1RM } from '../logic/brzycki'
+import { deloadDayPlan, deloadAccessoryWeight, withoutDeload } from '../logic/deload'
+import { suggestedTMFromRetest, reseedTopSetFromTM } from '../logic/tmRetest'
+import { remainingDays } from '../logic/weekOrder'
 import { bestAmrapE1RM } from '../logic/personalRecords'
 import { calculateWilks } from '../logic/wilks'
 import { barbellWeight } from '../logic/plates'
@@ -29,10 +32,15 @@ export default function WorkoutView() {
 }
 
 function WorkoutViewInner({ profile }: { profile: UserProfile }) {
-  const sessions = useStore((s) => s.sessions)
-  const setLogs = useStore((s) => s.setLogs)
+  const allSessions = useStore((s) => s.sessions)
+  const allSetLogs = useStore((s) => s.setLogs)
+  // Deload weeks are logged like any workout but never drive suggestions,
+  // prefill or progression. PR/e1RM reads use the full history.
+  const { sessions, setLogs } = useMemo(() => withoutDeload(allSessions, allSetLogs), [allSessions, allSetLogs])
   const saveWorkout = useStore((s) => s.saveWorkout)
   const advanceDay = useStore((s) => s.advanceDay)
+  const advanceDeloadDay = useStore((s) => s.advanceDeloadDay)
+  const endDeload = useStore((s) => s.endDeload)
   const updateProfile = useStore((s) => s.updateProfile)
   const addWilksEntry = useStore((s) => s.addWilksEntry)
   const aw = useStore((s) => s.activeWorkout)
@@ -49,6 +57,9 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
   // Optional RIR self-report for the hypertrophy top set. 0/1/2/3+ or null.
   const [topSetRir, setTopSetRir] = useState<number | null>(null)
+  // TM-retest day: user override for the suggested new training max (display units).
+  const [editedTM, setEditedTM] = useState('')
+  const [showEndDeloadAlert, setShowEndDeloadAlert] = useState(false)
 
   const programType = (aw.isActive ? aw.programType : undefined) ?? profile.programType ?? ProgramType.FiveThreeOne
   const isChestArms = programType === ProgramType.ChestArms
@@ -57,10 +68,18 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   // startSession) so a mid-session profile change — settings, cloud sync — can't
   // silently re-point it to another lift. Before a workout starts, both follow
   // the live profile so the day picker works.
-  const activeDay = aw.isActive ? (aw.day ?? profile.currentDay) : profile.currentDay
+  // A deload day is pinned the same way; between workouts it follows the profile.
+  const deloadType: DeloadType | null = aw.isActive
+    ? (aw.deloadType ?? null)
+    : (profile.isDeloading ? profile.deloadType : null)
+  const isDeload = deloadType !== null
+  const deloadLabel = deloadType === DT.TMTest ? 'TM Test' : 'Deload'
+  const deloadNoun = deloadType === DT.TMTest ? 'TM test' : 'deload'  // mid-sentence form
+  const nextDay = profile.isDeloading ? profile.deloadDay : profile.currentDay
+  const activeDay = aw.isActive ? (aw.day ?? nextDay) : nextDay
   const lift: MainLift | null = aw.isActive
     ? ((aw.liftRawValue ?? 0) > 0 ? (aw.liftRawValue as MainLift) : null)
-    : mainLiftForDay(programType, profile.currentDay, profile.dayOrder)
+    : mainLiftForDay(programType, nextDay, profile.dayOrder)
   // Week is pinned too, so a mid-session week advance (cloud sync) can't
   // re-prescribe the sets. Null snapshot = legacy in-flight workout → live.
   const activeWeek = aw.isActive ? (aw.week ?? profile.currentWeek) : profile.currentWeek
@@ -83,7 +102,16 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   // Build the main-lift prescription. For hypertrophy with a top-set main, use the stored
   // top-set weight; the algorithm computes warmups off of it. For day 4 (no main), empty.
+  const basePlan = customAccessories?.[accessoriesSlot] ?? (isChestArms ? getProgram(programType).defaultAccessories[accessoriesSlot] : [])
+  // Deload/TM-test days swap in the program's deload prescription: lighter main
+  // work and volume-scaled accessories.
+  const deloadPlan = deloadType
+    ? deloadDayPlan(getProgram(programType), deloadType, activeDay, { tmLbs: tm, dayOrder: profile.dayOrder, accessories: basePlan })
+    : null
+  const isRetestDay = deloadPlan?.isRetestDay ?? false
+
   const sets = (() => {
+    if (deloadPlan) return deloadPlan.mainSets
     if (!lift) return []
     if (isTopSetProgram) {
       const topSetLbs = (aw.isActive ? aw.topSetLbs : null) ?? profile.hypertrophyTopSets?.[lift]
@@ -98,7 +126,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
   const suppDisplayName = suppOverride?.exercise.name ?? (lift ? liftDisplayName(lift) : '')
-  const plan = (aw.isActive ? aw.prescription : undefined) ?? customAccessories?.[accessoriesSlot] ?? (isChestArms ? getProgram(programType).defaultAccessories[accessoriesSlot] : [])
+  const plan = (aw.isActive ? aw.prescription : undefined) ?? deloadPlan?.accessories ?? basePlan
   const accessories = plan.filter(ex => !ex.optional || (aw.enabledOptional ?? []).includes(ex.id))
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
@@ -217,6 +245,14 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     [setLogs, isTopSetProgram, isChestArms],
   )
 
+  /** Starting weight for an accessory set: the normal prefill, lightened on deload days. */
+  function prefillWeight(ex: AccessoryExercise): string {
+    const normal = defaultWeight(ex)
+    if (!isDeload || normal === '') return normal
+    const bw = ex.weightType === AccessoryWeightType.Bodyweight ? bwDisplay : null
+    return String(deloadAccessoryWeight(Number(normal), units, bw))
+  }
+
   // ---- Hypertrophy progression suggestions ----
 
   /** For the current main lift in hypertrophy mode, what does the algorithm
@@ -291,7 +327,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     const r: Record<string, string> = {}
     const a: Record<string, string> = {}
     for (const ex of accessories) {
-      const dw = defaultWeight(ex)
+      const dw = prefillWeight(ex)
       const dr = defaultReps(ex)
       const isBW = ex.weightType === AccessoryWeightType.Bodyweight
       const added = isBW && bwDisplay != null
@@ -315,18 +351,23 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     }
     setCollapsedSections(new Set())
     setTopSetRir(null)
+    setEditedTM('')
     // Default top-set reps: bottom of range for hypertrophy, AMRAP minimum for 5/3/1.
-    const startingReps = isTopSetProgram && lift
-      ? topSetRepRange(lift, programType).min
-      : amrapMinimum(profile!.currentWeek)
+    // Deload days only have a top set when retesting (starts at its range minimum).
+    const startingReps = isDeload
+      ? (sets.find((s) => s.isAMRAP)?.targetReps ?? 0)
+      : isTopSetProgram && lift
+        ? topSetRepRange(lift, programType).min
+        : amrapMinimum(profile!.currentWeek)
     updateAW({
       isActive: true,
       ...(isChestArms ? { prescription: structuredClone(accessories), programType, units, cycleNumber: profile.cycleNumber,
         bodyWeightLbs: profile.bodyWeightLbs, accRir: {}, warmups: [], warmupOverrides: [] } : {}),
       startTime: Date.now(),
-      day: profile.currentDay,
+      day: nextDay,
       liftRawValue: lift ?? 0,
-      week: profile.currentWeek,
+      week: isDeload ? 0 : profile.currentWeek,  // week 0 = deload
+      deloadType,
       tmLbs: lift ? useStore.getState().getTrainingMax(lift) : null,
       topSetLbs: isTopSetProgram && lift ? (profile.hypertrophyTopSets?.[lift] ?? null) : null,
       amrapReps: startingReps,
@@ -563,12 +604,25 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             .every(k => completedAccessory.has(k) && Number.isInteger(Number(aw.accReps[k])) && Number(aw.accReps[k]) >= (ex.repRangeMin ?? ex.reps))) } : {}),
         durationSeconds: duration,
         variant: currentVariant,
+        ...(deloadType ? { deloadType } : {}),
       },
       logEntries,
     )
 
+    // TM retest: apply the (possibly edited) new TM and reseed next cycle's top set.
+    if (isRetestDay && lift && retestDone && newTmLbs && newTmLbs > 0) {
+      updateProfile({
+        [trainingMaxField(lift)]: newTmLbs,
+        hypertrophyTopSets: {
+          ...(profile.hypertrophyTopSets ?? {}),
+          [lift]: reseedTopSetFromTM(getProgram(programType), newTmLbs, units),
+        },
+      })
+    }
+
     // Hypertrophy: bump the stored top-set weight for next session via the autoprogression algo.
-    if (isTopSetProgram && lift && curAmrapReps > 0) {
+    // Deload days never move the top set.
+    if (!isDeload && isTopSetProgram && lift && curAmrapReps > 0) {
       const next = computeNextHypertrophyTopSet(curAmrapReps, topSetRir)
       if (next) {
         updateProfile({
@@ -617,13 +671,23 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       }
     }
 
-    advanceDay(activeDay)
+    if (isDeload) advanceDeloadDay(activeDay)
+    else advanceDay(activeDay)
     clearAW()
     setShowFinishAlert(false)
   }
 
   const fmtElapsed = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
-  const bestE1RM = lift ? (bestAmrapE1RM(setLogs, lift)?.e1rm ?? null) : null
+  // PRs count every session, deloads and retests included.
+  const bestE1RM = lift ? (bestAmrapE1RM(allSetLogs, lift)?.e1rm ?? null) : null
+
+  // TM retest: live e1RM → suggested TM from the top set's weight × reps.
+  const retestIndex = isRetestDay ? sets.findIndex((s) => s.isAMRAP) : -1
+  const retestDone = retestIndex >= 0 && completedMain.has(retestIndex)
+  const retestWeightLbs = retestIndex >= 0 ? toStorageLbs(effectiveMainWeight(retestIndex), units) : 0
+  const retestE1RM = retestIndex >= 0 && aw.amrapReps > 0 ? estimated1RM(retestWeightLbs, aw.amrapReps) : null
+  const suggestedTM = retestIndex >= 0 && aw.amrapReps > 0 ? suggestedTMFromRetest(retestWeightLbs, aw.amrapReps, units) : null
+  const newTmLbs = toStorageLbs(Number(editedTM) || 0, units) || suggestedTM
 
   const warmupWorkingComplete = warmupWorkingIndices.every(({ index }) => completedMain.has(index))
   const supplementalComplete = supplementalIndices.every(({ index }) => completedMain.has(index))
@@ -634,8 +698,17 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   // ---- Render ----
   // Next-workout picker: any still-pending day of the current week can be started
   // next. Shown only before the workout starts, and only when there's a real choice.
-  const completedDays = profile.completedDaysThisWeek ?? []
+  const completedDays = (profile.isDeloading ? profile.deloadCompletedDays : profile.completedDaysThisWeek) ?? []
   const showDayPicker = !aw.isActive && completedDays.length < 3
+  const deloadDaysLeftAfter = remainingDays([...completedDays, activeDay]).length
+  const dayName = isTopSetProgram ? dayLabel(programType, activeDay) : (lift ? liftDisplayName(lift) : '')
+  const mainSectionTitle = isRetestDay
+    ? `Work Up to a Hard Top Set – ${lift ? liftDisplayName(lift) : ''}`
+    : deloadType === DT.TMTest
+      ? `Work Up to TM – ${lift ? liftDisplayName(lift) : ''}`
+      : isDeload
+        ? `Deload Sets – ${lift ? liftDisplayName(lift) : ''}`
+        : isTopSetProgram ? `Warmups + Top Set – ${lift ? liftDisplayName(lift) : ''}` : 'Warmups + 5/3/1'
 
   // 5/3/1 always needs a lift; hypertrophy day 4 (Pull Focus) has no top-set main.
   if (!lift && !isTopSetProgram) return null
@@ -646,14 +719,11 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold">
-              Week {activeWeek}:{' '}
-              {isTopSetProgram
-                ? dayLabel(programType, activeDay)
-                : (lift ? liftDisplayName(lift) : '')}
+              {isDeload ? deloadLabel : `Week ${activeWeek}`}: {dayName}
             </h1>
             <p className="text-sm text-[#8e8e93]">
               Cycle {profile.cycleNumber} · Day {activeDay} of 4
-              {isTopSetProgram ? ` · ${programLabel(programType)}` : ` · ${variantConfig.shortLabel}`}
+              {isDeload ? ` · ${deloadLabel} Week` : isTopSetProgram ? ` · ${programLabel(programType)}` : ` · ${variantConfig.shortLabel}`}
             </p>
           </div>
           {aw.isActive && (
@@ -669,7 +739,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             <div className="flex gap-1.5">
               {[1, 2, 3, 4].map((d) => {
                 const done = completedDays.includes(d)
-                const selected = d === profile.currentDay
+                const selected = d === nextDay
                 return (
                   <button
                     key={d}
@@ -696,16 +766,36 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             onClick={startSession}
             className="w-full mt-3 py-3 rounded-xl bg-[var(--color-accent)] font-semibold text-white text-center text-base"
           >
-            Start Workout
+            Start {isDeload ? `${deloadLabel} Workout` : 'Workout'}
           </button>
         )}
       </div>
 
+      {isDeload && (
+        <div className="bg-[#1c1c1e] rounded-xl p-4 text-sm space-y-2">
+          <p>
+            {isRetestDay
+              ? 'Work up to a hard top set (RPE 8-9, 1-2 RIR). Its result sets your new training max.'
+              : deloadType === DT.TMTest
+                ? 'Work up to your training max for a single.'
+                : 'Recovery week: light main work, accessories at about half the sets and ~80% of your usual load. Stay well short of failure.'}
+          </p>
+          <p className="text-xs text-[#8e8e93]">
+            {deloadLabel} sessions are saved to History and PRs, but they don't change your progression, next-session suggestions or prefilled weights.
+          </p>
+          {!aw.isActive && (
+            <button onClick={() => setShowEndDeloadAlert(true)} className="text-sm text-[var(--color-orange)]">
+              End {deloadLabel} Week Early
+            </button>
+          )}
+        </div>
+      )}
+
       {isChestArms && (
         <div className="bg-[#1c1c1e] rounded-xl p-4 text-sm space-y-2">
           {validationMessage && <p role="alert" className="text-[var(--color-red)]">{validationMessage}</p>}
-          <p>Start at 2–3 RIR; progress toward 1–2. Good form, no failure required. About 60 minutes; rest is advisory.</p>
-          <p>Suggested starting weights are editable; adjust to leave 2–3 reps in reserve. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
+          {!isDeload && <p>Start at 2–3 RIR; progress toward 1–2. Good form, no failure required. About 60 minutes; rest is advisory.</p>}
+          <p>Suggested starting weights are editable; adjust to leave {isDeload ? '3+' : '2–3'} reps in reserve. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
           <p>You may alternate curl and triceps sets to save time; log each separately.</p>
           {!aw.isActive && plan.filter(e => e.optional).map(ex => (
             <button key={ex.id} role="switch" aria-checked={(aw.enabledOptional ?? []).includes(ex.id)}
@@ -727,7 +817,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       {/* Warmups + Top Set (hypertrophy) or Warmups + 5/3/1 working sets */}
       {sets.length > 0 && (
         <CollapsibleSection
-          title={isTopSetProgram ? `Warmups + Top Set – ${lift ? liftDisplayName(lift) : ''}` : 'Warmups + 5/3/1'}
+          title={mainSectionTitle}
           isCollapsed={collapsedSections.has('warmup-working')}
           onToggle={() => toggleSection('warmup-working')}
           badge={completionBadge(warmupWorkingComplete, warmupWorkingIndices.length)}
@@ -748,7 +838,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                 onRepsChange={(v) => updateMainReps(i, v)}
                 onToggle={() => toggleSet('main', i)}
                 units={units}
-                showPercentage={!isTopSetProgram}
+                showPercentage={!isTopSetProgram || isDeload}
               />
               {/* RIR picker — only on the hypertrophy top set, while active and not yet completed */}
               {isTopSetProgram && s.isAMRAP && aw.isActive && !completedMain.has(i) && (
@@ -775,6 +865,36 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             </div>
           ))}
         </CollapsibleSection>
+      )}
+
+      {/* Retest result → new TM suggestion */}
+      {isRetestDay && retestE1RM !== null && suggestedTM !== null && (
+        <div className="bg-[#1c1c1e] rounded-xl p-4 space-y-2">
+          <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">New Training Max</h2>
+          <div className="text-sm text-[#8e8e93]">
+            e1RM ≈ <span className="text-white font-semibold">{displayRound(retestE1RM, units)} {units}</span>
+            {' → '}suggested TM (85%): <span className="text-[var(--color-accent)] font-semibold">{displayRound(suggestedTM, units)} {units}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">TM</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              placeholder={String(displayRound(suggestedTM, units))}
+              value={editedTM}
+              onChange={(e) => setEditedTM(e.target.value)}
+              className="w-24 text-right text-sm py-1 px-2"
+            />
+            <span className="text-xs text-[#8e8e93]">{units}</span>
+          </div>
+          {newTmLbs && newTmLbs > 0 && (
+            <div className="text-xs text-[#8e8e93]">
+              Next cycle's top set starts at{' '}
+              <span className="text-white">{displayRound(reseedTopSetFromTM(getProgram(programType), newTmLbs, units), units)} {units}</span>.
+              {retestDone ? ' Applied when you finish this workout.' : ' Complete the top set to apply it.'}
+            </div>
+          )}
+        </div>
       )}
 
       {/* 5/3/1 Supplemental Sets — not present in hypertrophy */}
@@ -834,7 +954,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                 Enter TOTAL weight (bodyweight + added), or set your bodyweight in Settings for separate added-load entry.
               </div>
             )}
-            {isChestArms && (() => {
+            {isChestArms && !isDeload && (() => {
               const guidance = workingSetGuidance(ex, activeDay, sessions, setLogs)
               return <div className="text-xs text-[var(--color-accent)] mb-2 space-y-2">
                 <p>{ex.weightType === AccessoryWeightType.NoWeight || (ex.progressionType !== ProgressionType.Double && ex.progressionType !== ProgressionType.RepsThenLoad)
@@ -843,16 +963,16 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
                 {guidance.canAdd && <p>Eligible next load: {workingWeightDisplay(guidance.suggestedWeight, units)} {units}{ex.weightType === AccessoryWeightType.Bodyweight ? ' total (BW + added)' : ''}. Optional: enter it manually when ready.</p>}
               </div>
             })()}
-            {suggestion && (
+            {suggestion && !isDeload && (
               <div className="text-xs text-[var(--color-accent)] mb-2">{suggestion.message}</div>
             )}
-            {isChestArms && !workingSetGuidance(ex, activeDay, sessions, setLogs).weight && (
+            {isChestArms && !isDeload && !workingSetGuidance(ex, activeDay, sessions, setLogs).weight && (
               <p className="text-xs text-[#8e8e93] mb-2">{startingWorkingWeight(ex, setLogs, {...profile, units}).source}</p>
             )}
             {isChestArms && ex.warmup && <div role="group" aria-label={`${ex.name} warmups`}>
               {[0.5,0.7,0.85].map((fraction,i) => {
                 const key = `warmup-${ex.id}-${i}`
-                const weight = workingWarmupWeight(Number(aw.accWeights[`${ex.name}-0`] ?? defaultWeight(ex)) || 0, fraction, units)
+                const weight = workingWarmupWeight(Number(aw.accWeights[`${ex.name}-0`] ?? prefillWeight(ex)) || 0, fraction, units)
                 const completed = (aw.warmups ?? []).includes(`${ex.id}-${i}`)
                 return <MainSetCard key={key} inputLabel={`${ex.name} warm-up ${i+1}`}
                   set={{id:key,setNumber:i+1,percentage:fraction,targetReps:[5,3,2][i],isWarmup:true,isAMRAP:false,isSupplemental:false,weight:toStorageLbs(weight,units)}}
@@ -872,7 +992,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
             {Array.from({ length: ex.sets }, (_, si) => {
               const key = `${ex.name}-${si}`
               const completed = completedAccessory.has(key)
-              const accWeight = Number(aw.accWeights[key] || defaultWeight(ex)) || 0
+              const accWeight = Number(aw.accWeights[key] || prefillWeight(ex)) || 0
               return (
                 <div
                   key={key}
@@ -969,7 +1089,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           onClick={() => setShowFinishAlert(true)}
           className="w-full py-3.5 rounded-xl font-semibold text-base text-[var(--color-green)] bg-[#1c1c1e] text-center"
         >
-          Finish Workout
+          Finish {isDeload ? `${deloadLabel} Workout` : 'Workout'}
         </button>
       )}
 
@@ -977,12 +1097,41 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       {showFinishAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setShowFinishAlert(false)}>
           <div className="bg-[#2c2c2e] rounded-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-lg mb-2">Finish Workout?</h3>
-            <p className="text-base text-[#8e8e93] mb-5">This will save your workout and move to the next session.</p>
+            <h3 className="font-semibold text-lg mb-2">Finish {isDeload ? `${deloadLabel} Workout` : 'Workout'}?</h3>
+            <p className="text-base text-[#8e8e93] mb-5">
+              {!isDeload
+                ? 'This will save your workout and move to the next session.'
+                : <>
+                    {isRetestDay && retestDone && newTmLbs && newTmLbs > 0 && lift
+                      ? `${liftDisplayName(lift)} TM will update to ${displayRound(newTmLbs, units)} ${units}. `
+                      : ''}
+                    {deloadDaysLeftAfter > 0
+                      ? `${deloadDaysLeftAfter} ${deloadNoun} ${deloadDaysLeftAfter === 1 ? 'day' : 'days'} left this week.`
+                      : `This is the last ${deloadNoun} day. Your next cycle starts after this.`}
+                  </>}
+            </p>
             <div className="flex gap-3">
               <button onClick={() => setShowFinishAlert(false)} className="flex-1 py-3 rounded-lg bg-[#38383a] text-base">Cancel</button>
               <button onClick={finishWorkout} className="flex-1 py-3 rounded-lg bg-[var(--color-green)] text-base font-semibold text-white">
                 Finish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End deload early */}
+      {showEndDeloadAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={() => setShowEndDeloadAlert(false)}>
+          <div className="bg-[#2c2c2e] rounded-2xl w-full max-w-xs p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-lg mb-2">End {deloadLabel} Week?</h3>
+            <p className="text-base text-[#8e8e93] mb-5">
+              The remaining {deloadNoun} days are skipped and Cycle {profile.cycleNumber + 1} starts now. Logged {deloadNoun} workouts stay in History.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowEndDeloadAlert(false)} className="flex-1 py-3 rounded-lg bg-[#38383a] text-base">Cancel</button>
+              <button onClick={() => { setShowEndDeloadAlert(false); endDeload() }} className="flex-1 py-3 rounded-lg bg-[var(--color-orange)] text-base font-semibold text-white">
+                End Now
               </button>
             </div>
           </div>

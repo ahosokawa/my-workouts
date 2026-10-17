@@ -13,7 +13,6 @@ import WorkoutDetailView from './views/WorkoutDetailView'
 import PRsView from './views/PRsView'
 import E1RMChartView from './views/E1RMChartView'
 import SettingsView from './views/SettingsView'
-import DeloadWorkoutView from './views/DeloadWorkoutView'
 import UpcomingWorkoutsView from './views/UpcomingWorkoutsView'
 
 export default function App() {
@@ -54,13 +53,13 @@ export default function App() {
     )
   }
 
-  // Normal app with tabs (DeloadWorkoutView replaces WorkoutView during deload week)
+  // Normal app with tabs (WorkoutView runs deload weeks in its deload mode)
   return (
     <div className="absolute inset-0 flex flex-col">
       <div className="flex-1 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Navigate to="/workout" replace />} />
-          <Route path="/workout" element={profile.isDeloading ? <DeloadWorkoutView /> : <WorkoutView />} />
+          <Route path="/workout" element={<WorkoutView />} />
           <Route path="/upcoming" element={<UpcomingWorkoutsView />} />
           <Route path="/history" element={<HistoryView />} />
           <Route path="/history/:sessionId" element={<WorkoutDetailView />} />

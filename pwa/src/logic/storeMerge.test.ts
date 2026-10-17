@@ -571,6 +571,21 @@ describe('mergePersistedState — deload trigger fields', () => {
     expect(kept.profile!.lastDeloadEndedAt).toBe('2026-05-01T00:00:00.000Z')
   })
 
+  it('migrates an in-flight linear deload to deloadCompletedDays', () => {
+    const mid = mergePersistedState(
+      { profile: { ...EXISTING_PROFILE, isDeloading: true, deloadType: 'deload', deloadDay: 3 } },
+      currentState(),
+    )
+    expect(mid.profile!.deloadCompletedDays).toEqual([1, 2])
+    const kept = mergePersistedState(
+      { profile: { ...EXISTING_PROFILE, isDeloading: true, deloadType: 'deload', deloadDay: 1, deloadCompletedDays: [4] } },
+      currentState(),
+    )
+    expect(kept.profile!.deloadCompletedDays).toEqual([4])
+    const idle = mergePersistedState({ profile: EXISTING_PROFILE }, currentState())
+    expect(idle.profile!.deloadCompletedDays).toBeUndefined()
+  })
+
   it('deloadCadenceWeeks defaults to 7 and is preserved when set', () => {
     const defaulted = mergePersistedState({ profile: EXISTING_PROFILE }, currentState())
     expect(defaulted.profile!.deloadCadenceWeeks).toBe(7)

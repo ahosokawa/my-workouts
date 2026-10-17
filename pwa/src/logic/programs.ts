@@ -59,7 +59,7 @@ export interface ProgramDeloadPlan {
   /** Prescription for a TM-test week. */
   tmTest: 'workUpToTM' | 'rpeRetest'
   /** Multiplier applied to accessory set counts during deload/TM-test weeks.
-   *  0 = no accessories (5/3/1), 0.5 = spec §6.2 halved volume. */
+   *  0 = no accessories, 0.5 = spec §6.2 halved volume (every program). */
   accessoryVolumeFactor: number
 }
 
@@ -130,7 +130,7 @@ export const PROGRAMS: Record<ProgramType, ProgramDefinition> = {
     dayOrder: { kind: 'user', default: MAIN_LIFTS },
     days: [MAIN_DAY, MAIN_DAY, MAIN_DAY, MAIN_DAY],
     defaultAccessories: FIVE_THREE_ONE_ACCESSORIES,
-    deloadPlan: { deload: 'percent531', tmTest: 'workUpToTM', accessoryVolumeFactor: 0 },
+    deloadPlan: { deload: 'percent531', tmTest: 'workUpToTM', accessoryVolumeFactor: 0.5 },
     usesVariants: true,
   },
   [ProgramType.Hypertrophy]: {

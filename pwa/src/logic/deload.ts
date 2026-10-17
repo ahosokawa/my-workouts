@@ -6,7 +6,7 @@
 // percentage scheme from calculator.ts; top-set programs use the spec §6.2
 // template (main lifts 60% of TM × 3×3, accessory volume halved).
 
-import type { AccessoryExercise, DeloadType, MainLift, PrescribedSet } from '../types'
+import type { AccessoryExercise, DeloadType, MainLift, PrescribedSet, SetLog, Units, WorkoutSession } from '../types'
 import { DeloadType as DT } from '../types'
 import { deloadSets as percent531DeloadSets, roundWeight } from './calculator'
 import type { ProgramDefinition } from './programs'
@@ -83,4 +83,51 @@ export function deloadDayPlan(
 
   // percentage engine — unchanged 5/3/1 prescriptions for both deload types
   return { lift, mainSets: percent531DeloadSets(ctx.tmLbs, deloadType), accessories, isRetestDay: false }
+}
+
+// ============================================================
+// Deload isolation — deload sessions are logged like any workout but never
+// drive progression, prefill, stall detection or muscle-group volume.
+// ============================================================
+
+/** Deload and TM-test sessions log week 0. */
+export function isDeloadSession(s: Pick<WorkoutSession, 'week'>): boolean {
+  return s.week === 0
+}
+
+/** History with deload weeks removed — the input for anything that suggests
+ *  next session's numbers. Logs without a known session are kept. */
+export function withoutDeload(
+  sessions: WorkoutSession[],
+  setLogs: SetLog[],
+): { sessions: WorkoutSession[]; setLogs: SetLog[] } {
+  const deloadIds = new Set(sessions.filter(isDeloadSession).map((s) => s.id))
+  if (deloadIds.size === 0) return { sessions, setLogs }
+  return {
+    sessions: sessions.filter((s) => !deloadIds.has(s.id)),
+    setLogs: setLogs.filter((l) => !deloadIds.has(l.sessionId)),
+  }
+}
+
+/** "Week 3", "Deload" or "TM Test" — legacy week-0 sessions read as Deload. */
+export function sessionWeekLabel(s: Pick<WorkoutSession, 'week' | 'deloadType'>): string {
+  if (!isDeloadSession(s)) return `Week ${s.week}`
+  return s.deloadType === DT.TMTest ? 'TM Test' : 'Deload'
+}
+
+/** Fraction of the normal working weight prefilled for deload accessories. */
+export const DELOAD_ACCESSORY_LOAD = 0.8
+
+/** Deload accessory prefill (display units): ~80% of the normal prefill,
+ *  rounded down to the loading step. Bodyweight totals keep the bodyweight and
+ *  scale only the added load. Loads below one step are left as-is. */
+export function deloadAccessoryWeight(normal: number, units: Units, bodyWeight: number | null): number {
+  if (!(normal > 0)) return 0
+  const step = units === 'kg' ? 1 : 2.5
+  const down = (x: number) => Math.floor(x / step + 1e-9) * step
+  if (bodyWeight != null && bodyWeight > 0) {
+    return bodyWeight + down(Math.max(0, normal - bodyWeight) * DELOAD_ACCESSORY_LOAD)
+  }
+  const scaled = down(normal * DELOAD_ACCESSORY_LOAD)
+  return scaled > 0 ? scaled : normal
 }

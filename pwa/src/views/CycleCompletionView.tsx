@@ -7,6 +7,7 @@ import { evaluateCycle, suggestedTMs } from '../logic/cycleEvaluator'
 import { getVariantConfig, suggestPhase } from '../logic/variants'
 import { getProgram, mainLiftForDay, usesTopSetEngine, getProgramAccessories } from '../logic/programs'
 import { deloadSuggestion } from '../logic/deloadTriggers'
+import { withoutDeload } from '../logic/deload'
 import { roundWeight } from '../logic/calculator'
 import WorkoutPlanEditor from '../components/WorkoutPlanEditor'
 import DayOrderEditor from '../components/DayOrderEditor'
@@ -479,7 +480,7 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
             Optional deload week before starting the next cycle.
           </p>
           {(() => {
-            const s = deloadSuggestion(profile, setLogs, getProgram(programType), new Date())
+            const s = deloadSuggestion(profile, withoutDeload(sessions, setLogs).setLogs, getProgram(programType), new Date())
             return s ? (
               <p className="text-xs text-[var(--color-orange)] mb-3">{s.message}</p>
             ) : null
@@ -490,10 +491,10 @@ function CycleCompletionViewInner({ profile }: { profile: UserProfile }) {
                 value: 'deload' as const,
                 label: 'Deload',
                 desc: selectedProgramType === ProgramType.ChestArms
-                  ? 'Half-volume movement guide; working weights remain your choice'
+                  ? 'Half the sets at ~80% of your usual load (recommended)'
                   : selectedIsTopSetProgram
-                  ? '3×3 at 60% TM, accessories at half volume (recommended)'
-                  : 'Light sets at 40-60% TM (recommended)',
+                  ? '3×3 at 60% TM, accessories at half sets and ~80% load (recommended)'
+                  : 'Light sets at 40-60% TM, accessories at half sets and ~80% load (recommended)',
               },
               {
                 value: 'tm_test' as const,

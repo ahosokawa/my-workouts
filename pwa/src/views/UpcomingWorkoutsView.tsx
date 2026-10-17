@@ -7,6 +7,7 @@ import { getUpcomingWorkouts, type UpcomingWorkout } from '../logic/upcomingWork
 import { getVariantConfig } from '../logic/variants'
 import { usesTopSetEngine, programLabel } from '../logic/hypertrophyCalculator'
 import { lastAccessorySession } from '../logic/progression'
+import { withoutDeload } from '../logic/deload'
 import CollapsibleSection from '../components/CollapsibleSection'
 
 function accessoryRepsLabel(ex: AccessoryExercise): string {
@@ -21,7 +22,10 @@ export default function UpcomingWorkoutsView() {
   const profile = useStore((s) => s.profile)
   const customAccessories = useStore((s) => s.customAccessories)
   const customSupplemental = useStore((s) => s.customSupplemental)
-  const setLogs = useStore((s) => s.setLogs)
+  const sessions = useStore((s) => s.sessions)
+  const allSetLogs = useStore((s) => s.setLogs)
+  // Previews mirror the workout prefill, which ignores deload weeks.
+  const setLogs = useMemo(() => withoutDeload(sessions, allSetLogs).setLogs, [sessions, allSetLogs])
 
   const workouts = useMemo(
     () => (profile ? getUpcomingWorkouts(profile, customAccessories, customSupplemental) : []),

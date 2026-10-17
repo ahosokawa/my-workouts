@@ -195,7 +195,10 @@ export interface UserProfile {
   units: Units
   isDeloading: boolean
   deloadType: DeloadType | null
-  deloadDay: number  // 1-4 during deload
+  deloadDay: number  // 1-4 during deload — the day selected to train next
+  // Deload days (1–4) finished this deload week; lets them be done in any order.
+  // Optional: in-flight legacy deloads migrate from deloadDay (strictly linear).
+  deloadCompletedDays?: number[]
   bodyWeightLbs: number | null
   bodyWeightLastUpdated: string | null  // ISO date
   createdAt: string                     // ISO date
@@ -219,6 +222,16 @@ export interface UserProfile {
   lastDeloadEndedAt?: string | null
   // Weeks between deload suggestions (time-based trigger). Default 7.
   deloadCadenceWeeks?: number
+}
+
+/** The profile field holding a main lift's training max. */
+export function trainingMaxField(lift: MainLift): 'squatTM' | 'benchTM' | 'deadliftTM' | 'pressTM' {
+  switch (lift) {
+    case MainLift.Squat: return 'squatTM'
+    case MainLift.BenchPress: return 'benchTM'
+    case MainLift.Deadlift: return 'deadliftTM'
+    case MainLift.ShoulderPress: return 'pressTM'
+  }
 }
 
 /** The stored training max (lbs) for a main lift. Single source for the
@@ -245,6 +258,8 @@ export interface WorkoutSession {
   programDay?: number
   prescription?: AccessoryExercise[]
   workingSetsCompleted?: boolean
+  // Set on deload/TM-test sessions (week 0). Absent on legacy week-0 sessions.
+  deloadType?: DeloadType
 }
 
 export interface SetLog {
