@@ -95,7 +95,7 @@ test('optional OHP is off, enabled explicitly, and bodyweight stores BW plus add
   expect(current.activeWorkout.prescription.at(-1)).toMatchObject({name:'Overhead Press',sets:2,repRangeMin:6,repRangeMax:10})
 })
 
-test('complete working sets unlock an optional suggestion without applying it', async ({page}) => {
+test('complete working sets at the top of the range prefill the next load', async ({page}) => {
   await activate(page)
   await page.getByRole('button',{name:'Start Workout'}).click()
   const current = await state(page)
@@ -118,10 +118,11 @@ test('complete working sets unlock an optional suggestion without applying it', 
     localStorage.setItem('my-workouts-storage',JSON.stringify(data))
   })
   await page.reload()
-  await expect(page.getByText('Eligible next load: 140 lbs. Optional: enter it manually when ready.')).toBeVisible()
+  await expect(page.getByText('Last: 135 × 8/8/8 → 140 × 6/6/6')).toBeVisible()
   await page.getByRole('button',{name:'Start Workout'}).click()
   const next = await state(page)
-  expect(next.activeWorkout.accWeights['Bench Press-0']).toBe('135')
+  expect(next.activeWorkout.accWeights['Bench Press-0']).toBe('140')
+  expect([0,1,2].map(i => next.activeWorkout.accReps[`Bench Press-${i}`])).toEqual(['6','6','6'])
   expect(next.activeWorkout.completedMain).toEqual([])
 })
 

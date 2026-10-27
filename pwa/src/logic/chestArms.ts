@@ -63,7 +63,7 @@ export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
 
 /** Strictly scoped to this program, day, identity AND prescription. Never infer
  * success from only the completed subset or from a different variant/range. */
-export function workingSetGuidance(ex: AccessoryExercise, day: number,
+function lastMatchingSession(ex: AccessoryExercise, day: number,
   sessions: WorkoutSession[], logs: SetLog[]) {
   const session = sessions.filter(s => s.programType === 'upper_lower_chest_arms' &&
     s.programDay === day && s.prescription?.some(e => e.id === ex.id && e.name === ex.name &&
@@ -71,6 +71,12 @@ export function workingSetGuidance(ex: AccessoryExercise, day: number,
     .sort((a,b) => b.date.localeCompare(a.date))[0]
   const sets = session ? logs.filter(l => l.sessionId === session.id && l.exerciseId === ex.id &&
     l.exerciseName === ex.name && !l.isWarmup) : []
+  return { session, sets }
+}
+
+export function workingSetGuidance(ex: AccessoryExercise, day: number,
+  sessions: WorkoutSession[], logs: SetLog[]) {
+  const { session, sets } = lastMatchingSession(ex, day, sessions, logs)
   const weight = sets.find(l => l.isCompleted)?.weight ?? sets[0]?.weight ?? 0
   const eligible = !!session?.workingSetsCompleted && sets.length === ex.sets &&
     sets.every((l, i) => l.setIndex === i && l.isCompleted && l.weight === weight &&
@@ -79,6 +85,34 @@ export function workingSetGuidance(ex: AccessoryExercise, day: number,
   const increment = ex.incrementLbs != null && Number.isFinite(ex.incrementLbs) && ex.incrementLbs > 0 ? ex.incrementLbs : 5
   const canAdd = eligible && (ex.progressionType === P.Double || ex.progressionType === P.RepsThenLoad) && ex.weightType !== W.NoWeight
   return { weight, suggestedWeight: canAdd ? weight + increment : weight, canAdd }
+}
+
+/** Next session's prefill from the same scoped history as `workingSetGuidance`.
+ * Strict load eligibility → +increment, reps reset to the range bottom. Otherwise
+ * same load: even sets all at RIR ≥ 1 → +1 each; else every set aims for the best
+ * set, except sets at RIR 0 / unlogged RIR, which hold. Targets stay within the
+ * rep range. Null when there is no matching history. */
+export function nextWorkingSets(ex: AccessoryExercise, day: number,
+  sessions: WorkoutSession[], logs: SetLog[]) {
+  const { sets } = lastMatchingSession(ex, day, sessions, logs)
+  const guidance = workingSetGuidance(ex, day, sessions, logs)
+  if (!sets.some(l => l.isCompleted && l.actualReps != null)) return null
+  const min = ex.repRangeMin ?? ex.reps
+  const max = ex.repRangeMax ?? ex.reps
+  const clamp = (r: number) => Math.min(max, Math.max(min, r))
+  const last = Array.from({ length: ex.sets }, (_, i) => {
+    const l = sets.find(s => s.setIndex === i)
+    return l?.isCompleted && l.actualReps != null ? { reps: l.actualReps, rir: l.rir ?? null } : null
+  })
+  const lastReps = last.map(s => s?.reps ?? null)
+  if (guidance.canAdd) {
+    return { lastWeight: guidance.weight, lastReps, weight: guidance.suggestedWeight, reps: last.map(() => min), addedLoad: true }
+  }
+  const best = Math.max(...last.map(s => s?.reps ?? 0))
+  const pushed = (s: { rir: number | null } | null) => s != null && s.rir != null && s.rir >= 1
+  const evenAndPushed = last.every(s => s?.reps === best && pushed(s))
+  const reps = last.map(s => clamp(evenAndPushed ? best + 1 : s && !pushed(s) ? s.reps : best))
+  return { lastWeight: guidance.weight, lastReps, weight: guidance.weight, reps, addedLoad: false }
 }
 
 /** Keep fractional kg loads/increments in the new program without changing legacy display rounding. */

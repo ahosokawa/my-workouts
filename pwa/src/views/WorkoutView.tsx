@@ -5,7 +5,7 @@ import type { AccessoryExercise, DeloadType, MainLift, UserProfile } from '../ty
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
 import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
-import { workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from '../logic/chestArms'
+import { workingSetGuidance, nextWorkingSets, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from '../logic/chestArms'
 import { getProgram, slotForDay, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
 import {
   nextTopSetRpe, nextDoubleProgression, nextRepsThenLoad,
@@ -200,7 +200,9 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     (ex: AccessoryExercise): string => {
       const isBW = ex.weightType === AccessoryWeightType.Bodyweight
       if (isChestArms) {
-        const prior = workingSetGuidance(ex, activeDay, sessions, setLogs).weight || startingWorkingWeight(ex, setLogs, {...profile, units}).weight
+        // Deload lightens last session's load, never a progression bump.
+        const prior = (!isDeload && nextWorkingSets(ex, activeDay, sessions, setLogs)?.weight) ||
+          workingSetGuidance(ex, activeDay, sessions, setLogs).weight || startingWorkingWeight(ex, setLogs, {...profile, units}).weight
         if (isBW) return String(bwDisplay != null ? Math.max(workingWeightDisplay(prior, units), bwDisplay) : workingWeightDisplay(prior, units))
         return prior > 0 ? String(workingWeightDisplay(prior, units)) : ''
       }
@@ -225,7 +227,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       return ''
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setLogs, sessions, activeDay, profile, units, isTopSetProgram, isChestArms],
+    [setLogs, sessions, activeDay, profile, units, isTopSetProgram, isChestArms, isDeload],
   )
 
   const defaultReps = useCallback(
@@ -329,6 +331,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
     for (const ex of accessories) {
       const dw = prefillWeight(ex)
       const dr = defaultReps(ex)
+      const nextReps = isChestArms && !isDeload ? nextWorkingSets(ex, activeDay, sessions, setLogs)?.reps : undefined
       const isBW = ex.weightType === AccessoryWeightType.Bodyweight
       const added = isBW && bwDisplay != null
         ? Math.max(0, Math.round(((Number(dw) || bwDisplay) - bwDisplay) * 2) / 2)
@@ -336,7 +339,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
       for (let i = 0; i < ex.sets; i++) {
         const key = `${ex.name}-${i}`
         if (ex.weightType !== AccessoryWeightType.NoWeight) w[key] = dw
-        r[key] = dr
+        r[key] = nextReps ? String(nextReps[i]) : dr
         if (isBW && bwDisplay != null && added > 0) a[key] = String(added)
       }
     }
@@ -955,12 +958,14 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
               </div>
             )}
             {isChestArms && !isDeload && (() => {
-              const guidance = workingSetGuidance(ex, activeDay, sessions, setLogs)
+              const next = nextWorkingSets(ex, activeDay, sessions, setLogs)
+              const load = (lbs: number) => ex.weightType === AccessoryWeightType.NoWeight ? ''
+                : `${workingWeightDisplay(lbs, units)}${ex.weightType === AccessoryWeightType.Bodyweight ? ' total' : ''} × `
               return <div className="text-xs text-[var(--color-accent)] mb-2 space-y-2">
                 <p>{ex.weightType === AccessoryWeightType.NoWeight || (ex.progressionType !== ProgressionType.Double && ex.progressionType !== ProgressionType.RepsThenLoad)
                   ? 'Build controlled reps and range of motion; no automatic load increase.'
-                  : `Hit ${ex.sets}×${ex.repRangeMax ?? ex.reps} with good form and at least 1 RIR on every set in a completed session to consider +${workingWeightDisplay(ex.incrementLbs ?? 5, units)} ${units}. Otherwise keep the load.`}</p>
-                {guidance.canAdd && <p>Eligible next load: {workingWeightDisplay(guidance.suggestedWeight, units)} {units}{ex.weightType === AccessoryWeightType.Bodyweight ? ' total (BW + added)' : ''}. Optional: enter it manually when ready.</p>}
+                  : `Hit ${ex.sets}×${ex.repRangeMax ?? ex.reps} with good form and at least 1 RIR on every set in a completed session to add +${workingWeightDisplay(ex.incrementLbs ?? 5, units)} ${units}. Otherwise keep the load and build reps.`}</p>
+                {next && <p>Last: {load(next.lastWeight)}{next.lastReps.map(r => r ?? '–').join('/')} → {next.addedLoad ? `${load(next.weight)}${next.reps.join('/')}` : `aim ${next.reps.join('/')}`}</p>}
               </div>
             })()}
             {suggestion && !isDeload && (

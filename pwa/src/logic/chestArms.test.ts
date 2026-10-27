@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight, upgradeHypertrophyUpperB } from './chestArms'
+import { CHEST_ARMS_ACCESSORIES as plan, workingSetGuidance, nextWorkingSets, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight, upgradeHypertrophyUpperB } from './chestArms'
 import { getProgram, seedProgram, programMainLiftForDay } from './programs'
 import { getUpcomingWorkouts } from './upcomingWorkouts'
-import { ProgramType, MainLift, toStorageLbs } from '../types'
+import { ProgramType, MainLift, ProgressionType as P, toStorageLbs } from '../types'
 import type { SetLog, WorkoutSession } from '../types'
 import { useStore } from '../store'
 import { emptyPersistedData, normalizePersistedData } from './persistedData'
@@ -53,6 +53,55 @@ describe('Chest & Arms prescription', () => {
     const upcoming = getUpcomingWorkouts(useStore.getState().profile!, null, null)
     expect(upcoming.slice(0,3).map(w => w.accessories[0].name)).toEqual(['Squat','Dips','Deadlift'])
     expect(upcoming.every(w => w.mainSets.length === 0 && w.supplementalSets.length === 0)).toBe(true)
+  })
+})
+
+describe('next working-set prefill', () => {
+  // Bench: 3 sets, 6–8, +5 lb.
+  function run(reps: number[], rirs: (number | null)[] = reps.map(() => 2)) {
+    const {session, logs} = history(reps)
+    logs.forEach((l, i) => { l.rir = rirs[i] })
+    return nextWorkingSets(bench, 1, [session], logs)
+  }
+  it.each([
+    [[6,6,6], [2,2,2], [7,7,7]],
+    [[7,6,6], [2,2,2], [7,7,7]],
+    [[8,7,6], [2,2,2], [8,8,8]],
+    [[7,7,6], [2,1,0], [7,7,6]],
+    [[7,7,7], [2,2,0], [7,7,7]],
+    [[6,6,6], [2,null,2], [6,6,6]],
+    [[7,6,6], [2,null,2], [7,6,7]],
+    [[6,6,5], [2,2,2], [6,6,6]],
+    [[6,6,5], [2,2,0], [6,6,6]],
+  ])('%j @ RIR %j → same load, aim %j', (reps, rirs, expected) => {
+    expect(run(reps, rirs)).toMatchObject({ weight: 135, reps: expected, addedLoad: false, lastWeight: 135, lastReps: reps })
+  })
+  it('adds load and resets reps once every set hits the top with RIR ≥ 1', () => {
+    expect(run([8,8,8])).toMatchObject({ weight: 140, reps: [6,6,6], addedLoad: true })
+  })
+  it('holds at the top when a top-of-range set was taken to failure', () => {
+    expect(run([8,8,8], [2,2,0])).toMatchObject({ weight: 135, reps: [8,8,8], addedLoad: false })
+  })
+  it('aims skipped sets at the best set', () => {
+    const {session, logs} = history([7,7,7])
+    logs[2].isCompleted = false
+    session.workingSetsCompleted = false
+    expect(nextWorkingSets(bench, 1, [session], logs)).toMatchObject({ reps: [7,7,7], lastReps: [7,7,null] })
+  })
+  it('nudges reps but never load for reps-only exercises, capped at the top', () => {
+    const hlr = {...bench, progressionType: P.RepsOnly, repRangeMin: 8, repRangeMax: 11}
+    const at = (reps: number[]) => {
+      const {session, logs} = history(reps)
+      session.prescription = [hlr]
+      return nextWorkingSets(hlr, 1, [session], logs)
+    }
+    expect(at([10,10,10])).toMatchObject({ weight: 135, reps: [11,11,11], addedLoad: false })
+    expect(at([11,11,11])).toMatchObject({ weight: 135, reps: [11,11,11], addedLoad: false })
+  })
+  it('returns null without matching history', () => {
+    const {session, logs} = history([7,7,7])
+    expect(nextWorkingSets(bench, 3, [session], logs)).toBeNull()
+    expect(nextWorkingSets({...bench, repRangeMax: 10}, 1, [session], logs)).toBeNull()
   })
 })
 
