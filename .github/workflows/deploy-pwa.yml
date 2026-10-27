@@ -21,7 +21,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.58 has no Chromium build for ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
     steps:
       # Actions are pinned to full commit SHAs — mutable tags in a workflow
       # with pages:write + id-token:write are a supply-chain risk.
