@@ -16,8 +16,8 @@ test.describe('PRs view', () => {
     await expect(page.getByText('Deadlift').first()).toBeVisible()
   })
 
-  test('shows best AMRAP sets section', async ({ page }) => {
-    await expect(page.getByText('Best AMRAP Sets')).toBeVisible()
+  test('shows best sets section', async ({ page }) => {
+    await expect(page.getByText('Best Sets', { exact: true })).toBeVisible()
   })
 
   test('Wilks tab shows score', async ({ page }) => {
@@ -61,12 +61,12 @@ test.describe('Wilks — sex toggle updates score', () => {
 })
 
 test.describe('PRs empty state', () => {
-  test('shows empty state with no AMRAP data', async ({ page }) => {
+  test('shows empty state with no lift data', async ({ page }) => {
     await loadFixture(page, 'mid-cycle-bbb.json')
     await page.goto('/')
     await page.getByRole('link', { name: /prs/i }).click()
 
     await expect(page.getByText('No PRs Yet')).toBeVisible()
-    await expect(page.getByText(/Complete AMRAP sets/)).toBeVisible()
+    await expect(page.getByText(/Complete Squat, Bench, Deadlift or OHP sets/)).toBeVisible()
   })
 })
