@@ -5,7 +5,7 @@ import { getUpcomingWorkouts } from './upcomingWorkouts'
 import { ProgramType, MainLift, ProgressionType as P, toStorageLbs } from '../types'
 import type { SetLog, WorkoutSession } from '../types'
 import { useStore } from '../store'
-import { emptyPersistedData, normalizePersistedData } from './persistedData'
+import { emptyPersistedData, normalizePersistedData, isOptionalEnabled } from './persistedData'
 import { parseBackup, serializeBackup } from './backup'
 import { bestAmrapE1RM } from './personalRecords'
 import { buildAnalysisFiles } from './analysis'
@@ -37,21 +37,23 @@ describe('Chest & Arms prescription', () => {
     const expected = [
       [[3,6,8],[3,6,10],[3,8,12],[2,8,12],[3,10,15],[3,10,15]],
       [[3,5,8],[3,8,10],[2,8,12],[3,12,20],[3,6,12]],
-      [[3,6,10],[3,8,12],[2,10,15],[3,12,20],[3,10,15],[3,12,20],[2,15,20],[2,6,10]],
+      [[2,6,10],[3,6,10],[3,8,12],[2,10,15],[3,12,20],[3,10,15],[3,12,20],[2,15,20]],
       [[2,4,6],[3,6,10],[2,8,12],[3,12,20],[3,8,15]],
     ]
     seed.dayOrder.forEach((slot, i) => {
       expect(plan[slot].map(e => [e.sets,e.repRangeMin,e.repRangeMax])).toEqual(expected[i])
       expect(programMainLiftForDay(def, i+1)).toBeNull()
     })
-    expect(plan[4].filter(e => e.optional).map(e => e.name)).toEqual(['Band Face Pull', 'Overhead Press'])
+    expect(plan[4].filter(e => e.optional).map(e => e.name)).toEqual(['Overhead Press', 'Band Face Pull'])
+    expect(plan[4][0].name).toBe('Overhead Press')
+    expect(plan[4].at(-1)!.name).toBe('Band Face Pull')
     expect(plan[2][3].notes).toContain('per arm')
     expect(plan[1][2].notes).toContain('per leg')
   })
   it('previews the correct day slots', () => {
     useStore.getState().createProfile(300,225,400,135,undefined,undefined,undefined,undefined,ProgramType.ChestArms)
     const upcoming = getUpcomingWorkouts(useStore.getState().profile!, null, null)
-    expect(upcoming.slice(0,3).map(w => w.accessories[0].name)).toEqual(['Squat','Dips','Deadlift'])
+    expect(upcoming.slice(0,3).map(w => w.accessories[0].name)).toEqual(['Squat','Overhead Press','Deadlift'])
     expect(upcoming.every(w => w.mainSets.length === 0 && w.supplementalSets.length === 0)).toBe(true)
   })
 })
@@ -217,19 +219,55 @@ describe('starting suggestions and warmups', () => {
 })
 
 
+const LEGACY_OHP_NOTES = 'Optional; skip to fit the hour. Rest 2 min.'
+
+describe('optional rows default on', () => {
+  const base = emptyPersistedData().activeWorkout
+  it('enables every optional row until switched off', () => {
+    expect(isOptionalEnabled(base, 'h-ohp')).toBe(true)
+    expect(isOptionalEnabled({...base, disabledOptional:['h-ohp']}, 'h-ohp')).toBe(false)
+    expect(isOptionalEnabled({...base, disabledOptional:['h-ohp']}, 'facepull')).toBe(true)
+  })
+  it('ignores a stale opt-in list before start but honors it for a workout already in progress', () => {
+    expect(isOptionalEnabled({...base, enabledOptional:['h-ohp']}, 'facepull')).toBe(true)
+    const inFlight = {...base, isActive:true, enabledOptional:['h-ohp']}
+    expect(isOptionalEnabled(inFlight, 'h-ohp')).toBe(true)
+    expect(isOptionalEnabled(inFlight, 'facepull')).toBe(false)
+  })
+})
+
 describe('Upper B band revision compatibility', () => {
   function oldPlan() {
     return {...structuredClone(plan), 4: [
-      ...structuredClone(plan[4].slice(0,5)),
+      ...structuredClone(plan[4].slice(1,6)),
       {id:'ca-ez-triceps',name:'Lying EZ-Bar Triceps Extension',sets:3,reps:10,
         repRangeMin:10,repRangeMax:15,weightType:'standard' as const},
-      structuredClone(plan[4].at(-1)!),
+      {...structuredClone(plan[4][0]), notes: LEGACY_OHP_NOTES},
     ]}
   }
+  /** Plan saved after the band revision but before OHP moved first. */
+  function ohpLastPlan() {
+    return {...structuredClone(plan), 4: [
+      ...structuredClone(plan[4].slice(1)),
+      {...structuredClone(plan[4][0]), notes: LEGACY_OHP_NOTES},
+    ]}
+  }
+  it('moves legacy last-place OHP to the front; idempotent and respects user edits', () => {
+    const saved = ohpLastPlan(), before = JSON.stringify(saved)
+    const upgraded = upgradeHypertrophyUpperB(saved)
+    expect(JSON.stringify(saved)).toBe(before)
+    expect(upgraded[4]).toEqual(plan[4])
+    expect(upgraded[1]).toBe(saved[1])
+    expect(upgradeHypertrophyUpperB(upgraded)).toBe(upgraded)
+    const removed = {...saved, 4: saved[4].filter(e => e.id !== 'h-ohp')}
+    expect(upgradeHypertrophyUpperB(removed)).toBe(removed)
+    const reordered = {...saved, 4: [...saved[4].slice(0,2), {...plan[4][0]}, ...saved[4].slice(2,-1)]}
+    expect(upgradeHypertrophyUpperB(reordered)).toBe(reordered)
+  })
   it('reuses existing band identities with reps-only tracking and optional face pulls', () => {
-    expect(plan[4][5]).toMatchObject({id:'ul-band-pushdown',name:'Band Triceps Pushdown',sets:3,
+    expect(plan[4][6]).toMatchObject({id:'ul-band-pushdown',name:'Band Triceps Pushdown',sets:3,
       repRangeMin:12,repRangeMax:20,weightType:'noWeight',progressionType:'reps_only'})
-    expect(plan[4][6]).toMatchObject({id:'facepull',name:'Band Face Pull',sets:2,
+    expect(plan[4][7]).toMatchObject({id:'facepull',name:'Band Face Pull',sets:2,
       repRangeMin:15,repRangeMax:20,weightType:'noWeight',progressionType:'reps_only',optional:true})
   })
   it('changes only the replaced row and inserts face pulls; is pure and idempotent', () => {
@@ -271,12 +309,13 @@ describe('Upper B band revision compatibility', () => {
   })
   it('does not duplicate existing band rows or replace deliberate substitutions', () => {
     const old = oldPlan()
-    old[4].push({...plan[4][5]}, {...plan[4][6], name:'Band Facepull'})
+    old[4].push({...plan[4][6]}, {...plan[4][7], name:'Band Facepull'})
     const upgraded = upgradeHypertrophyUpperB(old)
     expect(upgraded[4].filter(e => e.id === 'ul-band-pushdown')).toHaveLength(1)
     expect(upgraded[4].filter(e => e.id === 'facepull')).toHaveLength(1)
     const customized = oldPlan()
     customized[4][5].name='Custom Triceps Exercise'
-    expect(upgradeHypertrophyUpperB(customized)).toBe(customized)
+    const kept = upgradeHypertrophyUpperB(customized)
+    expect(kept[4].map(e => e.name)).toEqual(['Overhead Press', ...customized[4].slice(0,-1).map(e => e.name)])
   })
 })

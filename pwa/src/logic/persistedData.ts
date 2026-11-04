@@ -37,7 +37,11 @@ export interface ActiveWorkout {
   technique?: Record<string, boolean>
   warmupOverrides?: string[]
   warmups?: string[]
+  /** Legacy opt-in list; only honored for a workout already in progress when
+   * optional rows switched to on-by-default. */
   enabledOptional?: string[]
+  /** Optional rows switched off for this workout. Absent = all optional rows on. */
+  disabledOptional?: string[]
   // Pinned at startSession when the workout is a deload/TM-test day; absent = normal.
   deloadType?: DeloadType | null
   isActive: boolean
@@ -67,6 +71,12 @@ export interface ActiveWorkout {
   mainReps: Record<number, string>     // per-set rep overrides, keyed by set index
   lastSetTime: number | null
   showRestTimer: boolean
+}
+
+export function isOptionalEnabled(aw: ActiveWorkout, id: string): boolean {
+  if (aw.disabledOptional) return !aw.disabledOptional.includes(id)
+  if (aw.isActive && aw.enabledOptional) return aw.enabledOptional.includes(id)
+  return true
 }
 
 export const EMPTY_ACTIVE_WORKOUT: ActiveWorkout = {

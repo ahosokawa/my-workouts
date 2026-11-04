@@ -26,6 +26,11 @@ const OPTIONAL_FACE_PULL: AccessoryExercise = {
   notes: 'Optional. Pull to face, elbows high; controlled reps. Rest 60–90 sec.',
 }
 
+// Optional rows are included by default; the workout screen lets you switch them off.
+const LEGACY_OHP_NOTES = 'Optional; skip to fit the hour. Rest 2 min.'
+const OPTIONAL_OHP = exercise('h-ohp', 'Overhead Press', 2, 6, 10, W.Barbell,
+  'Optional (on by default); switch off to fit the hour. Rest 2 min.', { optional: true, warmup: true })
+
 export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
   [M.BenchPress]: [
     exercise('ca-bench', 'Bench Press', 3, 6, 8, W.Barbell, 'Rest 2–3 min.', { warmup: true }),
@@ -43,6 +48,7 @@ export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
     exercise('ul-ab-wheel', 'Ab Wheel Rollout', 3, 6, 12, W.NoWeight, 'Controlled reps; progress range of motion before load.'),
   ],
   [M.ShoulderPress]: [
+    OPTIONAL_OHP,
     exercise('ul-dips', 'Dips', 3, 6, 10, W.Bodyweight, 'Chest bias if comfortable. Rest 2 min.'),
     exercise('ul-csr', 'Chest-Supported DB Row', 3, 8, 12, W.Standard, 'Rest 90–120 sec. Weight per dumbbell.'),
     exercise('ul-incline-db', 'Incline DB Bench Press', 2, 10, 15, W.Standard, 'Or substitute Flat DB Bench Press in Settings. Weight per dumbbell.'),
@@ -50,7 +56,6 @@ export const CHEST_ARMS_ACCESSORIES: Record<M, AccessoryExercise[]> = {
     exercise('ul-hammer', 'DB Hammer Curl', 3, 10, 15, W.Standard, 'Rest 60–90 sec.', { incrementLbs: 2.5 }),
     BAND_PUSHDOWN,
     OPTIONAL_FACE_PULL,
-    exercise('h-ohp', 'Overhead Press', 2, 6, 10, W.Barbell, 'Optional; skip to fit the hour. Rest 2 min.', { optional: true, warmup: true }),
   ],
   [M.Deadlift]: [
     exercise('ca-deadlift', 'Deadlift', 2, 4, 6, W.Barbell, 'Conventional. Keep 2–3 RIR; avoid failure. Rest 2–3 min.', { warmup: true }),
@@ -157,6 +162,10 @@ export function workingWarmupWeight(workingDisplay: number, fraction: number, un
  * (including removing optional face pulls) survive reload without a new flag.
  * Session snapshots/logs are never passed here or rewritten. */
 export function upgradeHypertrophyUpperB(plan: Record<number, AccessoryExercise[]>): Record<number, AccessoryExercise[]> {
+  return moveOhpFirst(replaceEzTriceps(plan))
+}
+
+function replaceEzTriceps(plan: Record<number, AccessoryExercise[]>): Record<number, AccessoryExercise[]> {
   const upperB = plan[M.ShoulderPress]
   if (!upperB?.some(e => e.id === 'ca-ez-triceps' && e.name === 'Lying EZ-Bar Triceps Extension')) return plan
   const hasPushdown = upperB.some(e => e.name === BAND_PUSHDOWN.name)
@@ -165,4 +174,13 @@ export function upgradeHypertrophyUpperB(plan: Record<number, AccessoryExercise[
     ? [...(hasPushdown ? [] : [{...BAND_PUSHDOWN}]), ...(hasFacePull ? [] : [{...OPTIONAL_FACE_PULL}])]
     : [e])
   return {...plan, [M.ShoulderPress]: revised}
+}
+
+/** Optional OHP moved from last to first. The old default notes are the revision
+ * sentinel, so a user's later reorder or note edit is never undone. */
+function moveOhpFirst(plan: Record<number, AccessoryExercise[]>): Record<number, AccessoryExercise[]> {
+  const upperB = plan[M.ShoulderPress]
+  const ohp = upperB?.find(e => e.id === 'h-ohp' && e.name === 'Overhead Press' && e.notes === LEGACY_OHP_NOTES)
+  if (!upperB || !ohp) return plan
+  return {...plan, [M.ShoulderPress]: [{...ohp, notes: OPTIONAL_OHP.notes}, ...upperB.filter(e => e !== ohp)]}
 }

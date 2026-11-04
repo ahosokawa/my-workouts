@@ -67,13 +67,25 @@ test('additive selection, manual weight, RIR, warmups, partial save and history 
   await expect(page.getByText('8 reps · RIR 2')).toBeVisible()
 })
 
-test('optional OHP is off, enabled explicitly, and bodyweight stores BW plus added once', async ({page}) => {
+test('optional OHP and face pulls are on by default, can be switched off, and bodyweight stores BW plus added once', async ({page}) => {
   await activate(page)
   await page.getByRole('button',{name:'Upper B',exact:true}).click()
-  await expect(page.getByText('Include optional Overhead Press (2 sets)')).toBeVisible()
-  await expect(page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'})).not.toBeChecked()
+  await expect(page.getByRole('switch',{name:'Include optional Overhead Press (2 sets)'})).toBeChecked()
+  await expect(page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'})).toBeChecked()
   await page.getByRole('button',{name:'Start Workout'}).click()
   let current = await state(page)
+  expect(current.activeWorkout.prescription).toHaveLength(8)
+  expect(current.activeWorkout.prescription[0]).toMatchObject({name:'Overhead Press',sets:2,repRangeMin:6,repRangeMax:10})
+  expect(current.activeWorkout.prescription.at(-1)).toMatchObject({name:'Band Face Pull',sets:2,repRangeMin:15,repRangeMax:20})
+  // Restart from the isolated fixture for the switched-off case.
+  await activate(page)
+  await page.getByRole('button',{name:'Upper B',exact:true}).click()
+  await page.getByRole('switch',{name:'Include optional Overhead Press (2 sets)'}).click()
+  await page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'}).click()
+  await expect(page.getByRole('switch',{name:'Include optional Overhead Press (2 sets)'})).not.toBeChecked()
+  await expect(page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'})).not.toBeChecked()
+  await page.getByRole('button',{name:'Start Workout'}).click()
+  current = await state(page)
   expect(current.activeWorkout.prescription).toHaveLength(6)
   expect(current.activeWorkout.prescription[5]).toMatchObject({name:'Band Triceps Pushdown',sets:3,repRangeMin:12,repRangeMax:20})
   expect(current.activeWorkout.prescription.some((e:{name:string})=>e.name==='Band Face Pull')).toBe(false)
@@ -84,15 +96,6 @@ test('optional OHP is off, enabled explicitly, and bodyweight stores BW plus add
   expect(current.activeWorkout.accWeights['Dips-0']).toBe('190')
   await page.reload()
   await expect(page.locator('input[placeholder="0"]').first()).toHaveValue('10')
-  // Restart from the isolated fixture for the enabled case.
-  await activate(page)
-  await page.getByRole('button',{name:'Upper B',exact:true}).click()
-  await page.getByText('Include optional Overhead Press (2 sets)').click()
-  await page.getByRole('switch',{name:'Include optional Band Face Pull (2 sets)'}).click()
-  await page.getByRole('button',{name:'Start Workout'}).click()
-  current = await state(page)
-  expect(current.activeWorkout.prescription.at(-2)).toMatchObject({name:'Band Face Pull',sets:2,repRangeMin:15,repRangeMax:20})
-  expect(current.activeWorkout.prescription.at(-1)).toMatchObject({name:'Overhead Press',sets:2,repRangeMin:6,repRangeMax:10})
 })
 
 test('complete working sets at the top of the range prefill the next load', async ({page}) => {

@@ -4,6 +4,7 @@ import { liftDisplayName, MainLift as ML, AccessoryWeightType, DeloadType as DT,
 import type { AccessoryExercise, DeloadType, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
+import { isOptionalEnabled } from '../logic/persistedData'
 import { hypertrophyMainSets } from '../logic/hypertrophyCalculator'
 import { workingSetGuidance, nextWorkingSets, workingWeightDisplay, startingWorkingWeight, workingWarmupWeight } from '../logic/chestArms'
 import { getProgram, slotForDay, mainLiftForDay, programDayChipLabel, topSetRepRange, dayLabel, programLabel, usesTopSetEngine } from '../logic/programs'
@@ -127,7 +128,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
   const suppShowPlates = (suppOverride?.exercise.weightType ?? AccessoryWeightType.Barbell) === AccessoryWeightType.Barbell
   const suppDisplayName = suppOverride?.exercise.name ?? (lift ? liftDisplayName(lift) : '')
   const plan = (aw.isActive ? aw.prescription : undefined) ?? deloadPlan?.accessories ?? basePlan
-  const accessories = plan.filter(ex => !ex.optional || (aw.enabledOptional ?? []).includes(ex.id))
+  const accessories = plan.filter(ex => !ex.optional || isOptionalEnabled(aw, ex.id))
   const totalAccSets = accessories.reduce((n, ex) => n + ex.sets, 0)
 
   const completedMain = useMemo(() => new Set(aw.completedMain), [aw.completedMain])
@@ -786,16 +787,18 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
           {!isDeload && <p>Start at 2–3 RIR; progress toward 1–2. Good form, no failure required. About 60 minutes; rest is advisory.</p>}
           <p>Suggested starting weights are editable; adjust to leave {isDeload ? '3+' : '2–3'} reps in reserve. Dumbbell weights are per dumbbell; unilateral reps are per side. Bodyweight loads are stored as total BW + added weight.</p>
           <p>You may alternate curl and triceps sets to save time; log each separately.</p>
-          {!aw.isActive && plan.filter(e => e.optional).map(ex => (
-            <button key={ex.id} role="switch" aria-checked={(aw.enabledOptional ?? []).includes(ex.id)}
-              onClick={() => updateAW({enabledOptional:(aw.enabledOptional ?? []).includes(ex.id) ? (aw.enabledOptional ?? []).filter(id => id !== ex.id) : [...(aw.enabledOptional ?? []),ex.id]})}
+          {!aw.isActive && plan.filter(e => e.optional).map(ex => {
+            const on = isOptionalEnabled(aw, ex.id)
+            return (
+            <button key={ex.id} role="switch" aria-checked={on}
+              onClick={() => updateAW({disabledOptional: plan.filter(e => e.optional && (e.id === ex.id ? on : !isOptionalEnabled(aw, e.id))).map(e => e.id)})}
               className="w-full flex items-center justify-between gap-3 py-2 text-left">
               <span>Include optional {ex.name} ({ex.sets} sets)</span>
-              <span className={`w-11 h-6 rounded-full p-0.5 shrink-0 ${(aw.enabledOptional ?? []).includes(ex.id) ? 'bg-[var(--color-green)]' : 'bg-[#38383a]'}`}>
-                <span className={`block bg-white rounded-full w-5 h-5 transition-transform ${(aw.enabledOptional ?? []).includes(ex.id) ? 'translate-x-5' : ''}`} />
+              <span className={`w-11 h-6 rounded-full p-0.5 shrink-0 ${on ? 'bg-[var(--color-green)]' : 'bg-[#38383a]'}`}>
+                <span className={`block bg-white rounded-full w-5 h-5 transition-transform ${on ? 'translate-x-5' : ''}`} />
               </span>
             </button>
-          ))}
+          )})}
         </div>
       )}
       {/* Rest Timer - sticky inline bar */}
