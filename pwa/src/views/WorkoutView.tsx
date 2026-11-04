@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useStore } from '../store'
-import { liftDisplayName, AccessoryWeightType, DeloadType as DT, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound, trainingMaxField } from '../types'
+import { liftDisplayName, MainLift as ML, AccessoryWeightType, DeloadType as DT, ProgramType, ProgressionType, liftProgressionAmount, toDisplayWeight, toStorageLbs, displayRound, trainingMaxField } from '../types'
 import type { AccessoryExercise, DeloadType, MainLift, UserProfile } from '../types'
 import { prescribedSets, amrapMinimum } from '../logic/calculator'
 import { getVariantConfig } from '../logic/variants'
@@ -15,7 +15,7 @@ import { estimated1RM } from '../logic/brzycki'
 import { deloadDayPlan, deloadAccessoryWeight, withoutDeload } from '../logic/deload'
 import { suggestedTMFromRetest, reseedTopSetFromTM } from '../logic/tmRetest'
 import { remainingDays } from '../logic/weekOrder'
-import { bestAmrapE1RM } from '../logic/personalRecords'
+import { bestE1RM as bestLiftE1RM } from '../logic/personalRecords'
 import { calculateWilks } from '../logic/wilks'
 import { barbellWeight } from '../logic/plates'
 import PlateBreakdown from '../components/PlateBreakdown'
@@ -524,7 +524,6 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
     const logEntries: Parameters<typeof saveWorkout>[1] = []
 
-    let curAmrapWeight = 0
     let curAmrapReps = 0
     for (let i = 0; i < sets.length; i++) {
       const s = sets[i]
@@ -551,7 +550,6 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
         ...(s.repRangeMin !== undefined ? { repRangeMin: s.repRangeMin, repRangeMax: s.repRangeMax } : {}),
       })
       if (s.isAMRAP && completed) {
-        curAmrapWeight = weightLbs
         curAmrapReps = aw.amrapReps
       }
     }
@@ -639,25 +637,13 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
     // Wilks
     if (profile.bodyWeightLbs && profile.bodyWeightLbs > 0) {
+      // saveWorkout() above has already appended this session's logs to the store,
+      // so the best e1RMs below include today's sets (AMRAP or straight working sets).
       const allLogs = useStore.getState().setLogs
-      const liftName = lift ? liftDisplayName(lift) : null
-      const bestFor = (name: string) => {
-        let best = 0
-        for (const l of allLogs) {
-          if (l.exerciseName === name && l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null) {
-            const e = estimated1RM(l.weight, l.actualReps)
-            if (e !== null && e > best) best = e
-          }
-        }
-        if (liftName && name === liftName && curAmrapReps > 0) {
-          const e = estimated1RM(curAmrapWeight, curAmrapReps)
-          if (e !== null && e > best) best = e
-        }
-        return best
-      }
-      const sq = bestFor('Squat')
-      const bp = bestFor('Bench Press')
-      const dl = bestFor('Deadlift')
+      const bestFor = (l: MainLift) => bestLiftE1RM(allLogs, l)?.e1rm ?? 0
+      const sq = bestFor(ML.Squat)
+      const bp = bestFor(ML.BenchPress)
+      const dl = bestFor(ML.Deadlift)
       if (sq > 0 || bp > 0 || dl > 0) {
         const w = calculateWilks(profile.bodyWeightLbs, sq, bp, dl, profile.sex ?? 'male', 'lbs')
         if (w !== null) {
@@ -682,7 +668,7 @@ function WorkoutViewInner({ profile }: { profile: UserProfile }) {
 
   const fmtElapsed = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
   // PRs count every session, deloads and retests included.
-  const bestE1RM = lift ? (bestAmrapE1RM(allSetLogs, lift)?.e1rm ?? null) : null
+  const bestE1RM = lift ? (bestLiftE1RM(allSetLogs, lift)?.e1rm ?? null) : null
 
   // TM retest: live e1RM → suggested TM from the top set's weight × reps.
   const retestIndex = isRetestDay ? sets.findIndex((s) => s.isAMRAP) : -1

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { MAIN_LIFTS, liftDisplayName, displayRound } from '../types'
-import { bestAmrapE1RM } from '../logic/personalRecords'
+import { bestE1RM, liftWorkingSets } from '../logic/personalRecords'
 import { calculateWilks, formatWilks } from '../logic/wilks'
 import PRBoardView from './PRBoardView'
 import TrendsView from './TrendsView'
@@ -17,10 +17,8 @@ export default function PRsView() {
   const navigate = useNavigate()
   const units = profile?.units ?? 'lbs'
 
-  // Only used for the empty-state check; per-lift bests come from bestAmrapE1RM.
-  const amrapLogs = setLogs.filter(
-    (l) => l.isAMRAP && l.isMainLift && l.isCompleted && l.actualReps != null,
-  )
+  // Only used for the empty-state check; per-lift bests come from bestE1RM.
+  const hasLiftSets = MAIN_LIFTS.some((lift) => liftWorkingSets(setLogs, lift).length > 0)
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'e1rm', label: 'Est. 1RM' },
@@ -50,8 +48,8 @@ export default function PRsView() {
 
       {/* Tab content */}
       {tab === 'e1rm' && (
-        amrapLogs.length === 0 ? (
-          <EmptyState title="No PRs Yet" message="Complete AMRAP sets to see your personal records." />
+        !hasLiftSets ? (
+          <EmptyState title="No PRs Yet" message="Complete Squat, Bench, Deadlift or OHP sets to see your personal records." />
         ) : (
           <div className="space-y-4">
             {/* Est 1RM */}
@@ -61,7 +59,7 @@ export default function PRsView() {
               </div>
               <div className="px-4 pb-3 divide-y divide-[#38383a]">
                 {MAIN_LIFTS.map((lift) => {
-                  const best = bestAmrapE1RM(setLogs, lift)
+                  const best = bestE1RM(setLogs, lift)
                   return (
                     <div
                       key={lift}
@@ -89,11 +87,11 @@ export default function PRsView() {
             {/* Best AMRAP */}
             <div className="bg-[#1c1c1e] rounded-xl overflow-hidden">
               <div className="px-4 pt-3 pb-1">
-                <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Best AMRAP Sets</h2>
+                <h2 className="text-xs uppercase tracking-wider text-[#8e8e93]">Best Sets</h2>
               </div>
               <div className="px-4 pb-3 divide-y divide-[#38383a]">
                 {MAIN_LIFTS.map((lift) => {
-                  const best = bestAmrapE1RM(setLogs, lift)
+                  const best = bestE1RM(setLogs, lift)
                   return (
                     <div key={lift} className="flex items-center gap-3 py-2">
                       <div className="flex-1">

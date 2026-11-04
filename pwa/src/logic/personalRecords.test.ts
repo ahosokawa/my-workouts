@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { SetLog } from '../types'
 import { MainLift } from '../types'
 import { estimated1RM } from './brzycki'
-import { bestAmrapE1RM } from './personalRecords'
+import { bestAmrapE1RM, bestE1RM, isLiftWorkingSet, liftWorkingSets } from './personalRecords'
 
 let idCounter = 0
 
@@ -76,5 +76,61 @@ describe('bestAmrapE1RM', () => {
 
     const squat = bestAmrapE1RM(logs, MainLift.Squat)
     expect(squat!.weight).toBe(405)
+  })
+})
+
+describe('bestE1RM / liftWorkingSets (all programs)', () => {
+  /** Upper/Lower Hypertrophy logs primaries as straight working-set rows. */
+  const ulSet = (partial: Partial<SetLog> = {}) => setLog({
+    exerciseId: 'ca-bench', isMainLift: false, isAMRAP: false,
+    weight: 130, targetReps: 8, actualReps: 8, setIndex: 0, ...partial,
+  })
+
+  it('counts Upper/Lower Hypertrophy working sets logged with isMainLift: false', () => {
+    // Regression: 130×8 bench must beat an older 92.5×8 main-lift set.
+    const logs = [setLog({ isAMRAP: false, actualReps: null, weight: 92.5, targetReps: 8 }), ulSet()]
+    const best = bestE1RM(logs, MainLift.BenchPress)
+    expect(best).toEqual({ weight: 130, reps: 8, e1rm: estimated1RM(130, 8) })
+    expect(liftWorkingSets(logs, MainLift.BenchPress)).toHaveLength(2)
+  })
+
+  it('counts 5/3/1 non-AMRAP sets at their prescribed reps', () => {
+    const best = bestE1RM([setLog({ isAMRAP: false, actualReps: null, weight: 200, targetReps: 5 })], MainLift.BenchPress)
+    expect(best).toEqual({ weight: 200, reps: 5, e1rm: estimated1RM(200, 5) })
+  })
+
+  it('still counts AMRAP sets at their logged reps', () => {
+    const best = bestE1RM([setLog({ weight: 200, targetReps: 5, actualReps: 9 })], MainLift.BenchPress)
+    expect(best!.reps).toBe(9)
+  })
+
+  it('excludes warmups, incomplete, unloaded and zero-rep sets', () => {
+    expect(isLiftWorkingSet(ulSet({ isWarmup: true, weight: 300 }), MainLift.BenchPress)).toBe(false)
+    expect(isLiftWorkingSet(ulSet({ isCompleted: false }), MainLift.BenchPress)).toBe(false)
+    expect(isLiftWorkingSet(ulSet({ weight: 0 }), MainLift.BenchPress)).toBe(false)
+    expect(isLiftWorkingSet(ulSet({ actualReps: 0 }), MainLift.BenchPress)).toBe(false)
+    expect(isLiftWorkingSet(ulSet({ actualReps: Number.NaN }), MainLift.BenchPress)).toBe(false)
+  })
+
+  it('never matches variant lifts by a different name', () => {
+    const logs = [
+      ulSet({ exerciseName: 'Incline DB Bench Press', weight: 500 }),
+      ulSet({ exerciseName: 'Front Squat', weight: 500 }),
+      ulSet({ exerciseName: 'Romanian Deadlift', weight: 500 }),
+    ]
+    expect(bestE1RM(logs, MainLift.BenchPress)).toBeNull()
+    expect(bestE1RM(logs, MainLift.Squat)).toBeNull()
+    expect(bestE1RM(logs, MainLift.Deadlift)).toBeNull()
+  })
+
+  it('maps each program primary to its lift', () => {
+    const logs = [
+      ulSet({ exerciseName: 'Squat', weight: 225, actualReps: 6 }),
+      ulSet({ exerciseName: 'Deadlift', weight: 275, actualReps: 5 }),
+      ulSet({ exerciseName: 'Overhead Press', weight: 95, actualReps: 8 }),
+    ]
+    expect(bestE1RM(logs, MainLift.Squat)!.weight).toBe(225)
+    expect(bestE1RM(logs, MainLift.Deadlift)!.weight).toBe(275)
+    expect(bestE1RM(logs, MainLift.ShoulderPress)!.weight).toBe(95)
   })
 })

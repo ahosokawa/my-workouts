@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useStore } from '../store'
 import { MainLift, liftDisplayName, displayRound } from '../types'
 import { estimated1RM } from '../logic/brzycki'
+import { isLiftWorkingSet, performedReps } from '../logic/personalRecords'
 
 type Interval = 'week' | 'month'
 
@@ -18,20 +19,13 @@ export default function E1RMChartView() {
   const lift = Number(liftId) as MainLift
   const liftName = liftDisplayName(lift)
 
-  const filtered = setLogs.filter(
-    (l) =>
-      l.exerciseName === liftName &&
-      l.isAMRAP &&
-      l.isMainLift &&
-      l.isCompleted &&
-      l.actualReps != null &&
-      l.completedAt != null,
-  )
+  // AMRAPs and straight working sets alike, so programs without AMRAPs chart too.
+  const filtered = setLogs.filter((l) => isLiftWorkingSet(l, lift) && l.completedAt != null)
 
   // Compute best e1RM
   let bestE1RM = 0
   for (const l of filtered) {
-    const e = estimated1RM(l.weight, l.actualReps!)
+    const e = estimated1RM(l.weight, performedReps(l))
     if (e !== null && e > bestE1RM) bestE1RM = e
   }
 
@@ -50,7 +44,7 @@ export default function E1RMChartView() {
     } else {
       key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
     }
-    const e = estimated1RM(l.weight, l.actualReps!)
+    const e = estimated1RM(l.weight, performedReps(l))
     if (e !== null) {
       buckets[key] = Math.max(buckets[key] ?? 0, e)
     }
@@ -127,7 +121,7 @@ export default function E1RMChartView() {
         </div>
       ) : (
         <div className="text-center py-12">
-          <p className="text-sm text-[#8e8e93]">Complete AMRAP sets for {liftName} to see your estimated 1RM over time.</p>
+          <p className="text-sm text-[#8e8e93]">Complete {liftName} sets to see your estimated 1RM over time.</p>
         </div>
       )}
     </div>

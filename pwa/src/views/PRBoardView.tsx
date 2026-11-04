@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { MAIN_LIFTS, liftDisplayName, liftShortName, displayRound } from '../types'
 import type { Units } from '../types'
+import { liftWorkingSets, performedReps } from '../logic/personalRecords'
 
 export default function PRBoardView() {
   const setLogs = useStore((s) => s.setLogs)
@@ -9,9 +10,11 @@ export default function PRBoardView() {
   // Snapshot "one week ago" once at mount — used to highlight recent PRs.
   const [oneWeekAgo] = useState(() => Date.now() - 7 * 24 * 60 * 60 * 1000)
   const units: Units = profile?.units ?? 'lbs'
-  const completedMain = setLogs.filter((l) => l.isMainLift && l.isCompleted)
+  // Every program's sets for the 4 big lifts — including Upper/Lower Hypertrophy,
+  // which logs them as straight working-set rows rather than a main-lift block.
+  const liftSets = MAIN_LIFTS.flatMap((lift) => liftWorkingSets(setLogs, lift))
 
-  if (completedMain.length === 0) {
+  if (liftSets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <h2 className="font-semibold mb-1">No Data Yet</h2>
@@ -23,8 +26,8 @@ export default function PRBoardView() {
   // Build data: { exerciseName -> { rep -> { weight, isRecent } } }
   const data: Record<string, Record<number, { weight: number; isRecent: boolean }>> = {}
 
-  for (const log of completedMain) {
-    const reps = log.isAMRAP && log.actualReps != null ? log.actualReps : log.targetReps
+  for (const log of liftSets) {
+    const reps = performedReps(log)
     if (reps < 1 || reps > 20) continue
 
     const isRecent = log.completedAt ? new Date(log.completedAt).getTime() > oneWeekAgo : false
